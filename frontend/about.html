@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About – CropSense</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-nav">
+        <div class="brand">
+          <span class="brand-logo">🌱</span>
+          <div class="brand-text">
+            <span class="brand-name">CropSense</span>
+            <span class="brand-tagline">ML‑powered crop recommendation</span>
+          </div>
+        </div>
+        <nav class="top-nav-actions">
+          <span id="user-greeting" class="user-greeting hidden"></span>
+          <button id="logout-btn" class="ghost-btn nav-logout hidden" type="button">Logout</button>
+          <a href="index.html" class="nav-link">Home</a>
+          <a href="about.html" class="nav-link active">About</a>
+          <a href="login.html" class="primary-btn" data-auth-entry>Login / Sign up</a>
+        </nav>
+      </header>
+
+      <main class="layout">
+        <section class="card">
+          <div class="card-header">
+            <h2>About this crop recommendation system</h2>
+            <p class="card-subtitle">
+              Based on “Advancing crop recommendation system with supervised
+              machine learning and explainable artificial intelligence”.
+            </p>
+          </div>
+          <div class="hero-media" style="justify-content: flex-start; margin: 0.4rem 0 1rem;">
+            <img
+              class="hero-image"
+              style="max-width: 680px;"
+              src="assets/hero-farm.svg"
+              alt="Crop recommendation illustration"
+              loading="lazy"
+            />
+          </div>
+          <p class="placeholder" style="margin-bottom: 0.75rem;">
+            Agriculture is critical for food security and rural development, but
+            farmers must choose the right crop under constraints such as soil
+            health, climate, and limited land. Modern machine learning
+            techniques can support these decisions by learning patterns from
+            data covering soil nutrients, meteorological factors, and crop
+            performance.
+          </p>
+          <p class="placeholder" style="margin-bottom: 0.75rem;">
+            The underlying research evaluates multiple supervised algorithms and
+            this project uses a Random Forest classifier for multi‑class crop
+            prediction. It is designed for datasets with features such as
+            nitrogen (N), phosphorus (P), potassium (K), soil pH, temperature,
+            humidity, and rainfall, covering crops like rice, coffee, maize,
+            cotton, and more.
+          </p>
+          <p class="placeholder" style="margin-bottom: 0.75rem;">
+            To make model decisions transparent, Explainable AI (XAI) methods
+            such as SHAP are used. They highlight which features most influence
+            each recommendation, giving agronomists and farmers confidence in
+            the predictions and helping them understand why a specific crop is
+            suggested under given conditions.
+          </p>
+          <p class="placeholder">
+            This UI is a prototype front end that can be connected to a backend
+            implementation in Python (Pandas/NumPy for data handling, Random
+            Forest for prediction) and SHAP explanations to deliver fast,
+            accurate, and interpretable crop recommendations at the field level.
+          </p>
+
+          <div style="height: 0.9rem;"></div>
+
+          <div class="card-header">
+            <h2>Tech stack</h2>
+            <p class="card-subtitle">Tools used in this project.</p>
+          </div>
+          <ul class="hero-highlights">
+            <li><strong>Python</strong> for programming and ML backend.</li>
+            <li><strong>Random Forest</strong> for crop recommendation.</li>
+            <li><strong>SHAP</strong> for explainable AI (feature contributions).</li>
+            <li><strong>Pandas, NumPy</strong> for data manipulation.</li>
+            <li><strong>HTML, CSS, JavaScript</strong> for the UI.</li>
+          </ul>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p>
+          About page describing the ML and XAI foundations of the CropSense
+          prototype.
+        </p>
+      </footer>
+    </div>
+    <script src="app.js"></script>
+  </body>
+  </html>
+

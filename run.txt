@@ -1,0 +1,89 @@
+RUN INSTRUCTIONS (Crop Recommendation Project)
+=============================================
+
+Project folder:
+  d:\OneDrive\Documents\crop recommendation\crop recommendation
+
+You must run TWO things:
+  1) Python ML Backend (Random Forest + SHAP) on port 8001
+  2) Node.js API Gateway & Frontend Server on port 3000
+
+Prerequisites:
+  - Python installed
+  - Node.js & npm installed
+  - MongoDB installed and running on default port (27017) (Optional but recommended for saving users and predictions)
+
+STEP 0 (one-time): Install dependencies
+------------------------------------------
+Open PowerShell in the project folder and run:
+
+  cd "d:\OneDrive\Documents\crop recommendation\crop recommendation"
+  
+  # Install Python packages
+  pip install -r requirements.txt
+
+  # Install Node.js packages
+  npm install
+
+
+STEP 1: Ensure dataset exists
+-----------------------------
+Backend expects this file:
+  backend\data\crop_recommendation.csv
+
+If you have the full Kaggle dataset, place it exactly there with that filename.
+(A small sample CSV is already included so the backend can start immediately.)
+
+
+STEP 2: Start the PYTHON ML BACKEND (Terminal 1)
+--------------------------------------
+Open a NEW PowerShell window and run:
+
+  cd "d:\OneDrive\Documents\crop recommendation\crop recommendation"
+  python -m uvicorn backend.main:app --reload --port 8001
+  
+
+Backend URLs:
+  Health:   http://127.0.0.1:8001/health
+  Docs:     http://127.0.0.1:8001/docs
+
+
+STEP 3: Start the NODE.js SERVER (Terminal 2)
+---------------------------------------
+Open another NEW PowerShell window and run:
+
+  cd "d:\OneDrive\Documents\crop recommendation\crop recommendation"
+  node server.js
+
+Frontend pages (Routing is handled by Node.js serving the `frontend` folder statically):
+  Main:   http://localhost:3000/index.html
+  Login:  http://localhost:3000/login.html
+  About:  http://localhost:3000/about.html
+
+
+How Explainable AI (SHAP) appears
+---------------------------------
+On the main page, submit the form.
+The UI calls the Node.js backend (/predict), which forwards to Python ML Microservice and displays:
+  - Recommended crop + confidence
+  - Top class probabilities
+  - SHAP explanation (top features)
+  - Estimated financials
+
+
+Stop servers
+------------
+In each terminal window, press:
+  CTRL + C
+
+
+Troubleshooting
+---------------
+If the Node server crashes on startup:
+  - Check if port 3000 is already in use by another application.
+  - Install dependencies via `npm install`.
+
+If ML service fails or says "Backend not used":
+  - Make sure Python backend is running on port 8001.
+  - Check: http://127.0.0.1:8001/health
+  - Ensure dataset exists at: backend\data\crop_recommendation.csv

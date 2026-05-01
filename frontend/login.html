@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login / Sign up – CropSense</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-nav">
+        <div class="brand">
+          <span class="brand-logo">🌱</span>
+          <div class="brand-text">
+            <span class="brand-name">CropSense</span>
+            <span class="brand-tagline">ML‑powered crop recommendation</span>
+          </div>
+        </div>
+        <nav class="top-nav-actions">
+          <span id="user-greeting" class="user-greeting hidden"></span>
+          <button id="logout-btn" class="ghost-btn nav-logout hidden" type="button">Logout</button>
+          <a href="index.html" class="nav-link">Home</a>
+          <a href="about.html" class="nav-link">About</a>
+          <a href="login.html" class="primary-btn" data-auth-entry>Login / Sign up</a>
+        </nav>
+      </header>
+
+      <main class="layout">
+        <section class="hero">
+          <div class="hero-text">
+            <h1>Sign in or create your CropSense account.</h1>
+            <p class="hero-subtitle">
+              Securely manage your fields, run crop recommendations, and review
+              explainable AI insights (SHAP) tailored to your farm’s conditions.
+            </p>
+            <img
+              class="hero-inline-image"
+              src="assets/login-secure.svg"
+              alt="Secure login illustration"
+              loading="lazy"
+            />
+            <ul class="hero-highlights">
+              <li><strong>Single account</strong> for all your fields.</li>
+              <li>
+                <strong>Secure login</strong> ready to connect to your backend
+                auth API.
+              </li>
+              <li>
+                <strong>Designed for farmers</strong> and agronomists using
+                precision agriculture.
+              </li>
+            </ul>
+          </div>
+
+          <div class="auth-card" id="auth-card">
+            <div class="auth-tabs">
+              <button
+                class="auth-tab active"
+                data-auth-mode="signin"
+                id="signin-tab"
+              >
+                Sign in
+              </button>
+              <button
+                class="auth-tab"
+                data-auth-mode="signup"
+                id="signup-tab"
+              >
+                Create account
+              </button>
+            </div>
+
+            <form class="auth-form" id="auth-form">
+              <div class="field-row name-row" id="auth-name-row" style="display: none; gap: 1rem;">
+                <div style="flex: 1;">
+                  <label for="auth-firstName">First Name</label>
+                  <input type="text" id="auth-firstName" name="firstName" placeholder="Jane" />
+                </div>
+                <div style="flex: 1;">
+                  <label for="auth-lastName">Last Name</label>
+                  <input type="text" id="auth-lastName" name="lastName" placeholder="Doe" />
+                </div>
+              </div>
+
+              <div class="field-row">
+                <label for="auth-email">Email</label>
+                <input
+                  type="email"
+                  id="auth-email"
+                  name="email"
+                  required
+                  placeholder="you@example.com"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="auth-password">Password</label>
+                <input
+                  type="password"
+                  id="auth-password"
+                  name="password"
+                  required
+                  minlength="6"
+                  placeholder="At least 6 characters"
+                />
+              </div>
+
+              <div
+                class="field-row"
+                id="auth-confirm-password-row"
+                style="display: none"
+              >
+                <label for="auth-confirm-password">Confirm password</label>
+                <input
+                  type="password"
+                  id="auth-confirm-password"
+                  name="confirmPassword"
+                  minlength="6"
+                  placeholder="Re‑enter your password"
+                />
+              </div>
+
+              <button type="submit" class="primary-btn full-width" id="auth-btn">
+                Sign in
+              </button>
+
+              <p class="auth-helper" id="auth-helper-text">
+                New here? Switch to
+                <button type="button" class="link-btn" id="inline-signup">
+                  Create account
+                </button>
+                .
+              </p>
+            </form>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p>
+          Login prototype for a crop recommendation system based on supervised
+          machine learning and explainable AI.
+        </p>
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crop Recommendation System</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-nav">
+        <div class="brand">
+          <span class="brand-logo">🌱</span>
+          <div class="brand-text">
+            <span class="brand-name">CropSense</span>
+            <span class="brand-tagline">ML‑powered crop recommendation</span>
+          </div>
+        </div>
+        <nav class="top-nav-actions">
+          <span id="user-greeting" class="user-greeting hidden"></span>
+          <button id="logout-btn" class="ghost-btn nav-logout hidden" type="button">Logout</button>
+          <a href="index.html" class="nav-link active">Home</a>
+          <a href="about.html" class="nav-link">About</a>
+          <a href="login.html" class="primary-btn" data-auth-entry>Login / Sign up</a>
+        </nav>
+      </header>
+
+      <main class="layout">
+        <section class="hero">
+          <div class="hero-text">
+            <h1>Advancing crop recommendation with machine learning.</h1>
+            <p class="hero-subtitle">
+              Use soil nutrients and weather conditions to get data‑driven crop
+              suggestions. Built to plug into a Python + Random Forest model and
+              XAI (SHAP) for precision agriculture.
+            </p>
+            <ul class="hero-highlights">
+              <li><strong>Multi‑crop support</strong> across 22+ crop types.</li>
+              <li>
+                <strong>Key features</strong> like N, P, K, pH, temperature,
+                humidity, and rainfall.
+              </li>
+              <li>
+                <strong>Explainable predictions</strong> (designed to integrate
+                with XAI tools such as SHAP).
+              </li>
+            </ul>
+          </div>
+          <div class="hero-media">
+            <img
+              class="hero-image"
+              src="assets/hero-farm.svg"
+              alt="Crop recommendation illustration"
+              loading="lazy"
+            />
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <section class="card" aria-labelledby="input-section-title">
+            <div class="card-header">
+              <h2 id="input-section-title">Enter field conditions</h2>
+              <p class="card-subtitle">
+                Provide soil nutrients and environmental parameters. A backend
+                model (e.g., Random Forest in Python) can be plugged in later to
+                generate real crop recommendations.
+              </p>
+            </div>
+
+            <form id="crop-form" class="grid-form">
+              <div class="field-row">
+                <label for="nitrogen">
+                  Nitrogen (N)
+                  <span class="pill">kg/ha</span>
+                </label>
+                <input
+                  type="number"
+                  id="nitrogen"
+                  name="nitrogen"
+                  min="0"
+                  step="0.01"
+                  required
+                  placeholder="e.g., 90"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="phosphorus">
+                  Phosphorus (P)
+                  <span class="pill">kg/ha</span>
+                </label>
+                <input
+                  type="number"
+                  id="phosphorus"
+                  name="phosphorus"
+                  min="0"
+                  step="0.01"
+                  required
+                  placeholder="e.g., 42"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="potassium">
+                  Potassium (K)
+                  <span class="pill">kg/ha</span>
+                </label>
+                <input
+                  type="number"
+                  id="potassium"
+                  name="potassium"
+                  min="0"
+                  step="0.01"
+                  required
+                  placeholder="e.g., 35"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="temperature">
+                  Temperature
+                  <span class="pill">°C</span>
+                </label>
+                <input
+                  type="number"
+                  id="temperature"
+                  name="temperature"
+                  step="0.1"
+                  required
+                  placeholder="e.g., 24.5"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="humidity">
+                  Humidity
+                  <span class="pill">%</span>
+                </label>
+                <input
+                  type="number"
+                  id="humidity"
+                  name="humidity"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  required
+                  placeholder="e.g., 80"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="ph">
+                  Soil pH
+                  <span class="pill">0–14</span>
+                </label>
+                <input
+                  type="number"
+                  id="ph"
+                  name="ph"
+                  min="0"
+                  max="14"
+                  step="0.01"
+                  required
+                  placeholder="e.g., 6.5"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="rainfall">
+                  Rainfall
+                  <span class="pill">mm</span>
+                </label>
+                <input
+                  type="number"
+                  id="rainfall"
+                  name="rainfall"
+                  min="0"
+                  step="0.1"
+                  required
+                  placeholder="e.g., 120"
+                />
+              </div>
+
+              <div class="field-row">
+                <label for="season">
+                  Season
+                </label>
+                <select id="season" name="season" required>
+                  <option value="" disabled selected>Select Season</option>
+                  <option value="Kharif">Kharif</option>
+                  <option value="Rabi">Rabi</option>
+                  <option value="Zaid">Zaid</option>
+                  <option value="Post-Monsoon">Post-Monsoon</option>
+                </select>
+                <div id="season-preview" class="season-preview preview-text hidden" style="margin-top: 0.25rem; font-size: 0.875rem; color: #666;"></div>
+              </div>
+
+              <div class="field-row full-span">
+                <label for="location">
+                  Region / location
+                  <span class="pill optional">Optional</span>
+                </label>
+                <div class="location-input-group">
+                  <input
+                    type="text"
+                    id="location"
+                    name="location"
+                    placeholder="e.g., Jammu & Kashmir, India"
+                  />
+                  <button type="button" id="fetch-location-btn" class="secondary-btn-sm">
+                    <span class="icon">📍</span>
+                    <span>Fetch Location</span>
+                  </button>
+                </div>
+                <div id="location-status" class="status-message hidden"></div>
+              </div>
+
+              <div class="form-actions full-span">
+                <button type="reset" class="ghost-btn">Clear</button>
+                <button type="submit" class="primary-btn">Recommend crops</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="results-section-title">
+            <div class="card-header">
+              <h2 id="results-section-title">Recommendation & insights</h2>
+              <p class="card-subtitle">
+                This demo shows how recommendations and explanations could be
+                presented. Connect it to your ML API to serve real predictions.
+              </p>
+            </div>
+
+            <div id="recommendation-output" class="recommendation-output">
+              <p class="placeholder">
+                Submit the form to see a sample recommendation. In a full
+                implementation, this panel would display the predicted crop
+                contributions from SHAP).
+              </p>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p>
+          Prototype UI for a crop recommendation system based on supervised
+          machine learning and explainable AI.
+        </p>
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
+
