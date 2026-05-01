@@ -216,3 +216,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node.js
+node_modules/
+
+# Environment variables (VERY IMPORTANT)
+.env
+
+# ML model files
+*.pkl
+*.joblib
+
+# Dataset files
+*.csv
+*.xlsx
+
+# Logs
+*.log
+
+# Python cache
+__pycache__/
+
+# Virtual environments
+venv/
+env/
