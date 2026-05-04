@@ -20,7 +20,7 @@ Open PowerShell in the project folder and run:
   cd "d:\OneDrive\Documents\crop recommendation\crop recommendation"
   
   # Install Python packages
-  pip install -r requirements.txt
+  pip install -r backend/ml_service/requirements.txt
 
   # Install Node.js packages
   npm install
@@ -29,10 +29,7 @@ Open PowerShell in the project folder and run:
 STEP 1: Ensure dataset exists
 -----------------------------
 Backend expects this file:
-  backend\data\crop_recommendation.csv
-
-If you have the full Kaggle dataset, place it exactly there with that filename.
-(A small sample CSV is already included so the backend can start immediately.)
+  backend\data\indian_agri_dataset_15k.csv
 
 
 STEP 2: Start the PYTHON ML BACKEND (Terminal 1)
@@ -40,7 +37,7 @@ STEP 2: Start the PYTHON ML BACKEND (Terminal 1)
 Open a NEW PowerShell window and run:
 
   cd "d:\OneDrive\Documents\crop recommendation\crop recommendation"
-  python -m uvicorn backend.main:app --reload --port 8001
+  python -m uvicorn backend.ml_service.main:app --reload --port 8001
   
 
 Backend URLs:
@@ -52,8 +49,8 @@ STEP 3: Start the NODE.js SERVER (Terminal 2)
 ---------------------------------------
 Open another NEW PowerShell window and run:
 
-  cd "d:\OneDrive\Documents\crop recommendation\crop recommendation"
-  node server.js
+  
+  node backend\web_server.js
 
 Frontend pages (Routing is handled by Node.js serving the `frontend` folder statically):
   Main:   http://localhost:3000/index.html
@@ -86,4 +83,4 @@ If the Node server crashes on startup:
 If ML service fails or says "Backend not used":
   - Make sure Python backend is running on port 8001.
   - Check: http://127.0.0.1:8001/health
-  - Ensure dataset exists at: backend\data\crop_recommendation.csv
+  - Ensure dataset exists at: backend\data\indian_agri_dataset_15k.csv

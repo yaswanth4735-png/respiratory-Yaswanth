@@ -1,78 +1,78 @@
 {
   "Kharif": {
     "top_crops": {
-      "rice": 15,
-      "jute": 14,
-      "cotton": 4,
-      "coffee": 3,
-      "maize": 2
+      "jute": 802,
+      "maize": 771,
+      "coffee": 743,
+      "rice": 716,
+      "cotton": 716
     },
-    "count": 38,
+    "count": 3748,
     "avg_features": {
-      "N": 83.4,
-      "P": 45.2,
-      "K": 36.8,
-      "Temperature": 24.8,
-      "humidity": 78.5,
-      "pH": 6.85,
-      "Rainfall": 175.2
-    }
-  },
-  "Rabi": {
-    "top_crops": {
-      "rice": 12,
-      "maize": 11,
-      "coffee": 6,
-      "cotton": 8,
-      "jute": 7
-    },
-    "count": 44,
-    "avg_features": {
-      "N": 82.1,
-      "P": 44.9,
-      "K": 32.5,
-      "Temperature": 23.9,
-      "humidity": 74.3,
-      "pH": 6.72,
-      "Rainfall": 142.6
-    }
-  },
-  "Zaid": {
-    "top_crops": {
-      "rice": 6,
-      "maize": 6,
-      "cotton": 6,
-      "jute": 5,
-      "coffee": 5
-    },
-    "count": 28,
-    "avg_features": {
-      "N": 85.6,
-      "P": 43.7,
-      "K": 34.1,
-      "Temperature": 24.5,
-      "humidity": 76.8,
-      "pH": 6.91,
-      "Rainfall": 158.3
+      "N": 91.26,
+      "P": 43.72,
+      "K": 29.6,
+      "Temperature": 25.25,
+      "humidity": 73.49,
+      "pH": 6.64,
+      "Rainfall": 156.41
     }
   },
   "Post-Monsoon": {
     "top_crops": {
-      "rice": 6,
-      "maize": 9,
-      "cotton": 7,
-      "jute": 5,
-      "coffee": 4
+      "coffee": 767,
+      "rice": 764,
+      "jute": 756,
+      "maize": 751,
+      "cotton": 748
     },
-    "count": 31,
+    "count": 3786,
     "avg_features": {
-      "N": 84.2,
-      "P": 46.1,
-      "K": 35.9,
-      "Temperature": 24.2,
-      "humidity": 77.2,
-      "pH": 6.78,
-      "Rainfall": 165.4
+      "N": 91.65,
+      "P": 43.52,
+      "K": 29.52,
+      "Temperature": 25.31,
+      "humidity": 73.5,
+      "pH": 6.64,
+      "Rainfall": 157.62
+    }
+  },
+  "Rabi": {
+    "top_crops": {
+      "jute": 788,
+      "rice": 773,
+      "maize": 758,
+      "coffee": 741,
+      "cotton": 689
+    },
+    "count": 3749,
+    "avg_features": {
+      "N": 90.87,
+      "P": 43.7,
+      "K": 29.85,
+      "Temperature": 25.32,
+      "humidity": 73.66,
+      "pH": 6.64,
+      "Rainfall": 157.72
+    }
+  },
+  "Zaid": {
+    "top_crops": {
+      "maize": 791,
+      "rice": 766,
+      "jute": 733,
+      "cotton": 717,
+      "coffee": 710
+    },
+    "count": 3717,
+    "avg_features": {
+      "N": 90.95,
+      "P": 43.54,
+      "K": 29.44,
+      "Temperature": 25.24,
+      "humidity": 73.54,
+      "pH": 6.64,
+      "Rainfall": 156.25
     }
   }
 }

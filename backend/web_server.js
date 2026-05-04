@@ -9,8 +9,12 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const PYTHON_API_URL = "http://127.0.0.1:8001";
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017";
+const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://127.0.0.1:8001";
+// Prefer DATABASE_URL when present (common in deploy platforms), fall back to MONGO_URI.
+const MONGO_URI =
+  process.env.DATABASE_URL ||
+  process.env.MONGO_URI ||
+  "mongodb://localhost:27017";
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
@@ -21,8 +25,8 @@ if (!JWT_SECRET) {
 app.use(cors());
 app.use(express.json());
 
-// Serve frontend static files
-app.use(express.static(path.join(__dirname, "frontend")));
+// Serve frontend static files (frontend/ is at repo root)
+app.use(express.static(path.join(__dirname, "..", "frontend")));
 
 let db, usersCol, predictionsCol;
 
@@ -33,7 +37,7 @@ async function connectDB() {
     db = client.db("crop_recommendation_db");
     usersCol = db.collection("users");
     predictionsCol = db.collection("predictions");
-    
+
     // Create unique index for user emails
     await usersCol.createIndex({ email: 1 }, { unique: true });
     console.log("Connected to MongoDB successfully!");
@@ -78,7 +82,7 @@ app.post("/signup", async (req, res) => {
   if (!db) return res.status(503).json({ detail: "Database connection is currently down." });
 
   const { email, password, firstName, lastName } = req.body;
-  
+
   if (!email || !password || !firstName || !lastName) {
     return res.status(400).json({ detail: "Missing required fields" });
   }
@@ -96,7 +100,7 @@ app.post("/signup", async (req, res) => {
     first_name: firstName,
     last_name: lastName,
     password: hashedPassword,
-    created_at: new Date()
+    created_at: new Date(),
   };
 
   await usersCol.insertOne(newUser);
@@ -126,8 +130,8 @@ app.post("/login", async (req, res) => {
     user: {
       email: user.email,
       first_name: user.first_name,
-      last_name: user.last_name
-    }
+      last_name: user.last_name,
+    },
   });
 });
 
@@ -159,8 +163,8 @@ app.post("/predict", authenticateToken, async (req, res) => {
           financials: {
             investment: predictionData.estimated_investment,
             profit: predictionData.estimated_profit,
-            insight: predictionData.market_insight
-          }
+            insight: predictionData.market_insight,
+          },
         };
         await predictionsCol.insertOne(doc);
       } catch (dbErr) {
@@ -170,7 +174,6 @@ app.post("/predict", authenticateToken, async (req, res) => {
 
     // 3. Respond to frontend
     res.json(predictionData);
-
   } catch (error) {
     console.error("Error calling Python ML service:", error.message);
     if (error.response) {
@@ -184,3 +187,4 @@ app.post("/predict", authenticateToken, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Node.js API Gateway running on port ${PORT}`);
 });
+

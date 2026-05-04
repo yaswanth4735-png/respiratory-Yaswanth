@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "D:\OneDrive\Documents\crop recommendation\crop recommendation\test_predict.py", line 8, in <module>
-    predict(CropFeatures(N=90, P=42, K=43, temperature=20, humidity=82, ph=6.5, rainfall=120, Season='Kharif'))
-  File "D:\OneDrive\Documents\crop recommendation\crop recommendation\backend\main.py", line 223, in predict
-    best_idx = int(np.argmax(proba))
-                   ^^
-UnboundLocalError: cannot access local variable 'np' where it is not associated with a value

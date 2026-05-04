@@ -36,17 +36,16 @@ The frontend is now **connected** to the backend. When you submit the form on `i
 
 - `POST http://localhost:8001/predict`
 
-A simple FastAPI backend is scaffolded in `../backend/main.py`:
+A simple FastAPI backend is scaffolded in `../ml_service/main.py`:
 
 - Random Forest model trained on the Kaggle crop recommendation dataset
 - SHAP explanations for each prediction
 
-To run the backend (after placing `crop_recommendation.csv` into `backend/data/`):
+To run the backend (after placing `indian_agri_dataset_15k.csv` into `backend/data/`):
 
 ```bash
-pip install -r requirements.txt
-cd backend
-uvicorn main:app --reload --port 8001
+pip install -r backend/ml_service/requirements.txt
+uvicorn backend.ml_service.main:app --reload --port 8001
 ```
 
 Key endpoints:

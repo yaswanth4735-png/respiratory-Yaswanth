@@ -1,0 +1,78 @@
+{
+  "Kharif": {
+    "top_crops": {
+      "rice": 12,
+      "maize": 6,
+      "cotton": 4,
+      "coffee": 3,
+      "jute": 3
+    },
+    "count": 50,
+    "avg_features": {
+      "N": 85.2,
+      "P": 45.1,
+      "K": 38.4,
+      "Temperature": 24.8,
+      "humidity": 78.6,
+      "pH": 6.7,
+      "Rainfall": 185.3
+    }
+  },
+  "Rabi": {
+    "top_crops": {
+      "rice": 15,
+      "maize": 8,
+      "cotton": 5,
+      "jute": 4,
+      "coffee": 2
+    },
+    "count": 60,
+    "avg_features": {
+      "N": 88.5,
+      "P": 48.2,
+      "K": 40.1,
+      "Temperature": 22.1,
+      "humidity": 75.4,
+      "pH": 6.5,
+      "Rainfall": 165.7
+    }
+  },
+  "Zaid": {
+    "top_crops": {
+      "rice": 8,
+      "cotton": 6,
+      "maize": 4,
+      "coffee": 4,
+      "jute": 3
+    },
+    "count": 35,
+    "avg_features": {
+      "N": 82.3,
+      "P": 42.7,
+      "K": 36.9,
+      "Temperature": 26.4,
+      "humidity": 72.8,
+      "pH": 6.9,
+      "Rainfall": 142.6
+    }
+  },
+  "Post-Monsoon": {
+    "top_crops": {
+      "rice": 10,
+      "maize": 7,
+      "cotton": 5,
+      "coffee": 3,
+      "jute": 2
+    },
+    "count": 45,
+    "avg_features": {
+      "N": 84.7,
+      "P": 46.5,
+      "K": 39.2,
+      "Temperature": 23.5,
+      "humidity": 77.2,
+      "pH": 6.6,
+      "Rainfall": 170.9
+    }
+  }
+}

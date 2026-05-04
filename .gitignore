@@ -231,6 +231,9 @@ node_modules/
 *.csv
 *.xlsx
 
+# Allow the training dataset needed for deployment
+!backend/data/indian_agri_dataset_15k.csv
+
 # Logs
 *.log
 
