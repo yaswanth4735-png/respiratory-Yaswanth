@@ -9,14 +9,8 @@ services:
     healthCheckPath: /health
     envVars:
       # Set these in Render dashboard (do NOT commit secrets)
-      - key: GEMINI_API_KEY
+      - key: DATA_GOV_API_KEY
         sync: false
-      - key: AGMARKET_API_URL
-        sync: false
-      - key: AGMARKET_API_KEY
-        sync: false
-      - key: AGMARKET_API_KEY_HEADER
-        value: x-api-key
 
   # 2) Node.js web + API gateway (serves frontend and proxies /predict to Python)
   - type: web

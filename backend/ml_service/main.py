@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from urllib import error, parse, request
 
 import numpy as np  # type: ignore
@@ -17,11 +17,6 @@ from pydantic import BaseModel, Field, field_validator  # type: ignore
 from sklearn.compose import ColumnTransformer  # type: ignore
 from sklearn.ensemble import RandomForestClassifier  # type: ignore
 from sklearn.preprocessing import OneHotEncoder  # type: ignore
-
-try:
-    from google import genai  # type: ignore
-except ModuleNotFoundError:
-    genai = None  # type: ignore
 
 ROOT_DIR = Path(__file__).resolve().parents[2]  # repo root
 load_dotenv(dotenv_path=ROOT_DIR / ".env")
@@ -63,14 +58,40 @@ class CropFeatures(BaseModel):
         return v
 
 
+class MandiPriceRecord(BaseModel):
+    state: str
+    district: str
+    market: str
+    commodity: str
+    variety: str
+    grade: str = ""
+    arrival_date: str = ""
+    min_price: float = 0
+    max_price: float = 0
+    modal_price: float = 0
+
+
+class PriceSummary(BaseModel):
+    min_price: float
+    max_price: float
+    avg_modal_price: float
+    num_markets: int
+    commodity_searched: str
+
+
 class PredictionResponse(BaseModel):
     recommended_crop: str
     confidence: float
     class_probabilities: Dict[str, float]
     shap_explanation: List[Dict[str, Any]]
-    estimated_investment: Any = None
-    estimated_profit: Any = None
-    market_insight: str | None = None
+    market_prices: List[MandiPriceRecord] = []
+    price_summary: Optional[PriceSummary] = None
+    estimated_investment: float = 0
+    estimated_profit: float = 0
+    estimated_investment_per_acre: float = 0
+    estimated_profit_per_acre: float = 0
+    assumed_yield_quintal_per_acre: float = 10
+    market_insight: str = ""
 
 
 class SeasonRecsResponse(BaseModel):
@@ -90,114 +111,159 @@ class_names: List[str] = []
 startup_error: str | None = None
 
 
-def fetch_agmarket_data(crop: str, location: str) -> Dict[str, Any] | None:
-    base_url = os.getenv("AGMARKET_API_URL")
-    if not base_url:
-        return None
+# ---------------------------------------------------------------------------
+# Crop name -> data.gov.in commodity name mapping
+# The ML model predicts lowercase crop names; the API expects title-case.
+# ---------------------------------------------------------------------------
+CROP_TO_COMMODITY: Dict[str, str] = {
+    "rice": "Rice",
+    "maize": "Maize",
+    "chickpea": "Bengal Gram(Gram)(Whole)",
+    "kidneybeans": "Rajma",
+    "pigeonpeas": "Arhar (Tur/Red Gram)(Whole)",
+    "mothbeans": "Moth",
+    "mungbean": "Green Gram (Moong)(Whole)",
+    "blackgram": "Black Gram (Urd Beans)(Whole)",
+    "lentil": "Masur Dal",
+    "pomegranate": "Pomegranate",
+    "banana": "Banana",
+    "mango": "Mango",
+    "grapes": "Grapes",
+    "watermelon": "Water Melon",
+    "muskmelon": "Musk Melon",
+    "apple": "Apple",
+    "orange": "Orange",
+    "papaya": "Papaya",
+    "coconut": "Coconut",
+    "cotton": "Cotton",
+    "jute": "Jute",
+    "coffee": "Coffee",
+}
 
-    api_key = os.getenv("AGMARKET_API_KEY")
-    api_key_header = os.getenv("AGMARKET_API_KEY_HEADER", "x-api-key")
-
-    try:
-        formatted_url = base_url.format(crop=parse.quote(crop), location=parse.quote(location))
-        req = request.Request(formatted_url)
-        if api_key:
-            req.add_header(api_key_header, api_key)
-
-        with request.urlopen(req, timeout=8) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-
-        record = None
-        if isinstance(payload, dict):
-            records = payload.get("records")
-            if isinstance(records, list) and records:
-                record = records[0]
-
-        source_obj = record if isinstance(record, dict) else payload
-        return {
-            "source": "agmarket",
-            "crop": crop,
-            "location": location,
-            "min_price": source_obj.get("min_price") or source_obj.get("min") or source_obj.get("minimum_price"),
-            "max_price": source_obj.get("max_price") or source_obj.get("max") or source_obj.get("maximum_price"),
-            "modal_price": source_obj.get("modal_price") or source_obj.get("modal"),
-            "market": source_obj.get("market"),
-            "state": source_obj.get("state"),
-            "district": source_obj.get("district"),
-            "variety": source_obj.get("variety"),
-            "arrival_date": source_obj.get("arrival_date"),
-            "raw": payload,
-        }
-    except (error.URLError, json.JSONDecodeError, KeyError, ValueError) as e:
-        print(f"WARN - AgMarket fetch failed: {e}")
-        return None
+DATA_GOV_RESOURCE_ID = "9ef84268-d588-465a-a308-a864a43d0070"
 
 
-def get_financial_estimates(crop: str, location: str) -> dict:
-    api_key = os.getenv("GEMINI_API_KEY")
+def fetch_mandi_prices(crop: str) -> Dict[str, Any]:
+    """Fetch live mandi prices from data.gov.in for a given crop."""
+    assumed_yield_quintal_per_acre = float(os.getenv("ASSUMED_YIELD_QUINTAL_PER_ACRE", "10"))
 
-    fallbacks = {
-        "rice": {"investment": 25000, "profit": 35000},
-        "maize": {"investment": 18000, "profit": 21000},
-        "chickpea": {"investment": 12000, "profit": 8000},
-        "kidneybeans": {"investment": 15000, "profit": 10000},
-        "pigeonpeas": {"investment": 14000, "profit": 9000},
-        "mothbeans": {"investment": 10000, "profit": 6000},
-        "mungbean": {"investment": 11000, "profit": 7000},
-        "blackgram": {"investment": 11500, "profit": 7500},
-        "lentil": {"investment": 12000, "profit": 8000},
-        "pomegranate": {"investment": 40000, "profit": 30000},
-        "banana": {"investment": 35000, "profit": 25000},
-        "mango": {"investment": 30000, "profit": 20000},
-        "grapes": {"investment": 45000, "profit": 35000},
-        "watermelon": {"investment": 20000, "profit": 15000},
-        "muskmelon": {"investment": 18000, "profit": 12000},
-        "apple": {"investment": 50000, "profit": 40000},
-        "orange": {"investment": 35000, "profit": 25000},
-        "papaya": {"investment": 25000, "profit": 18000},
-        "coconut": {"investment": 20000, "profit": 15000},
-        "cotton": {"investment": 30000, "profit": 20000},
-        "jute": {"investment": 22000, "profit": 14000},
-        "coffee": {"investment": 40000, "profit": 25000},
-    }
-
-    def estimate_without_llm() -> dict:
-        crop_key = str(crop).strip().lower()
-        inv = fallbacks.get(crop_key, {"investment": 20000})["investment"]
-        prof = fallbacks.get(crop_key, {"profit": 10000})["profit"]
-        return {
-            "investment": inv,
-            "profit": prof,
-            "insight": f"Market outlook for {crop} in {location} appears stable with moderate return potential.",
-        }
-
+    api_key = os.getenv("DATA_GOV_API_KEY", "")
     if not api_key:
-        return estimate_without_llm()
+        print("WARN - DATA_GOV_API_KEY not set, skipping mandi price fetch.")
+        return {
+            "market_prices": [],
+            "price_summary": None,
+            "estimated_investment": 0.0,
+            "estimated_profit": 0.0,
+            "estimated_investment_per_acre": 0.0,
+            "estimated_profit_per_acre": 0.0,
+            "assumed_yield_quintal_per_acre": assumed_yield_quintal_per_acre,
+            "market_insight": "DATA_GOV_API_KEY not configured.",
+        }
+
+    crop_key = str(crop).strip().lower()
+    commodity = CROP_TO_COMMODITY.get(crop_key, crop.strip().title())
 
     try:
-        if genai is None:
-            raise ImportError("Google GenAI SDK is not installed or failed to import.")
+        url = (
+            f"https://api.data.gov.in/resource/{DATA_GOV_RESOURCE_ID}"
+            f"?api-key={parse.quote(api_key)}"
+            f"&format=json"
+            f"&limit=10"
+            f"&filters[commodity]={parse.quote(commodity)}"
+        )
+        payload: Dict[str, Any] = {}
+        last_error: Exception | None = None
+        for timeout in (10, 20):
+            try:
+                req = request.Request(url, headers={"User-Agent": "crop-recommendation-app/1.0"})
+                with request.urlopen(req, timeout=timeout) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                last_error = None
+                break
+            except Exception as retry_err:
+                last_error = retry_err
+        if last_error is not None:
+            raise last_error
 
-        client = genai.Client(api_key=api_key)
-        market_data = fetch_agmarket_data(crop, location)
-        market_context = json.dumps(market_data, ensure_ascii=True) if market_data else "No AgMarket data available."
+        records = payload.get("records", [])
+        if not records:
+            return {
+                "market_prices": [],
+                "price_summary": None,
+                "estimated_investment": 0.0,
+                "estimated_profit": 0.0,
+                "estimated_investment_per_acre": 0.0,
+                "estimated_profit_per_acre": 0.0,
+                "assumed_yield_quintal_per_acre": assumed_yield_quintal_per_acre,
+                "market_insight": f"No mandi data found for '{commodity}'.",
+            }
 
-        prompt = f"""
-You are an agriculture expert.
-Estimate per-acre investment and profit for {crop} in {location} (India).
-Use this AgMarket context when available:
-{market_context}
-Return ONLY JSON:
-{{"investment": 25000, "profit": 15000, "insight": "short explanation"}}
-"""
+        market_prices = []
+        for rec in records:
+            market_prices.append({
+                "state": rec.get("state", ""),
+                "district": rec.get("district", ""),
+                "market": rec.get("market", ""),
+                "commodity": rec.get("commodity", commodity),
+                "variety": rec.get("variety", ""),
+                "grade": rec.get("grade", ""),
+                "arrival_date": rec.get("arrival_date", ""),
+                "min_price": float(rec.get("min_price", 0)),
+                "max_price": float(rec.get("max_price", 0)),
+                "modal_price": float(rec.get("modal_price", 0)),
+            })
 
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-        text = (response.text or "").replace("```json", "").replace("```", "").strip()
-        if not text:
-            raise ValueError("Empty response text from model")
-        return json.loads(text)
-    except Exception:
-        return estimate_without_llm()
+        all_min = [p["min_price"] for p in market_prices if p["min_price"] > 0]
+        all_max = [p["max_price"] for p in market_prices if p["max_price"] > 0]
+        all_modal = [p["modal_price"] for p in market_prices if p["modal_price"] > 0]
+
+        price_summary = {
+            "min_price": min(all_min) if all_min else 0,
+            "max_price": max(all_max) if all_max else 0,
+            "avg_modal_price": round(sum(all_modal) / len(all_modal), 2) if all_modal else 0,
+            "num_markets": len(market_prices),
+            "commodity_searched": commodity,
+        }
+
+        avg_modal = float(price_summary["avg_modal_price"])
+        min_price = float(price_summary["min_price"])
+        max_price = float(price_summary["max_price"])
+
+        estimated_investment = round(min_price, 2)
+        estimated_profit = round(max(0.0, avg_modal - min_price), 2)
+        estimated_investment_per_acre = round(estimated_investment * assumed_yield_quintal_per_acre, 2)
+        estimated_profit_per_acre = round(estimated_profit * assumed_yield_quintal_per_acre, 2)
+        spread = max(0.0, max_price - min_price)
+        market_insight = (
+            f"{commodity}: average modal price is Rs {avg_modal:.2f}/quintal across "
+            f"{price_summary['num_markets']} markets; observed spread Rs {spread:.2f}. "
+            f"Per-acre estimate uses assumed yield {assumed_yield_quintal_per_acre:.1f} quintal/acre."
+        )
+
+        return {
+            "market_prices": market_prices,
+            "price_summary": price_summary,
+            "estimated_investment": estimated_investment,
+            "estimated_profit": estimated_profit,
+            "estimated_investment_per_acre": estimated_investment_per_acre,
+            "estimated_profit_per_acre": estimated_profit_per_acre,
+            "assumed_yield_quintal_per_acre": assumed_yield_quintal_per_acre,
+            "market_insight": market_insight,
+        }
+
+    except Exception as e:
+        print(f"WARN - data.gov.in fetch failed: {e}")
+        return {
+            "market_prices": [],
+            "price_summary": None,
+            "estimated_investment": 0.0,
+            "estimated_profit": 0.0,
+            "estimated_investment_per_acre": 0.0,
+            "estimated_profit_per_acre": 0.0,
+            "assumed_yield_quintal_per_acre": assumed_yield_quintal_per_acre,
+            "market_insight": "Unable to fetch mandi data from data.gov.in.",
+        }
 
 
 def load_and_train_model() -> None:
@@ -373,17 +439,21 @@ def predict(features: CropFeatures) -> PredictionResponse:
 
     shap_explanation = [{"feature": name, "weight": float(weight)} for name, weight in shap_pairs]
 
-    location = features.location or "India"
-    financials = get_financial_estimates(recommended_crop, location)
+    mandi_data = fetch_mandi_prices(recommended_crop)
 
     return {
         "recommended_crop": recommended_crop,
         "confidence": confidence,
         "class_probabilities": prob_dict,
         "shap_explanation": shap_explanation,
-        "estimated_investment": financials.get("investment"),
-        "estimated_profit": financials.get("profit"),
-        "market_insight": financials.get("insight"),
+        "market_prices": mandi_data.get("market_prices", []),
+        "price_summary": mandi_data.get("price_summary"),
+        "estimated_investment": float(mandi_data.get("estimated_investment", 0)),
+        "estimated_profit": float(mandi_data.get("estimated_profit", 0)),
+        "estimated_investment_per_acre": float(mandi_data.get("estimated_investment_per_acre", 0)),
+        "estimated_profit_per_acre": float(mandi_data.get("estimated_profit_per_acre", 0)),
+        "assumed_yield_quintal_per_acre": float(mandi_data.get("assumed_yield_quintal_per_acre", 10)),
+        "market_insight": str(mandi_data.get("market_insight", "")),
     }
 
 

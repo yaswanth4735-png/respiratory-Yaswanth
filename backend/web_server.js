@@ -77,6 +77,31 @@ function authenticateToken(req, res, next) {
   }
 }
 
+app.get("/health", async (req, res) => {
+  try {
+    const mlHealthRes = await axios.get(`${PYTHON_API_URL}/health`);
+    return res.json({
+      status: "ok",
+      node: "up",
+      python_api: {
+        reachable: true,
+        ...mlHealthRes.data,
+      },
+      database_connected: Boolean(db),
+    });
+  } catch (error) {
+    return res.status(503).json({
+      status: "degraded",
+      node: "up",
+      python_api: {
+        reachable: false,
+      },
+      database_connected: Boolean(db),
+      detail: "Python ML service is unavailable.",
+    });
+  }
+});
+
 // Signup Route
 app.post("/signup", async (req, res) => {
   if (!db) return res.status(503).json({ detail: "Database connection is currently down." });
@@ -145,6 +170,26 @@ app.get("/me", authenticateToken, async (req, res) => {
   });
 });
 
+app.get("/season-recs", async (req, res) => {
+  const season = String(req.query.season || "").trim();
+  if (!season) {
+    return res.status(400).json({ detail: "Query parameter 'season' is required" });
+  }
+
+  try {
+    const pythonRes = await axios.get(`${PYTHON_API_URL}/season-recs`, {
+      params: { season },
+    });
+    return res.json(pythonRes.data);
+  } catch (error) {
+    console.error("Error calling Python season-recs service:", error.message);
+    if (error.response) {
+      return res.status(error.response.status).json(error.response.data);
+    }
+    return res.status(503).json({ detail: "Machine Learning service is unavailable." });
+  }
+});
+
 // Predict Route
 app.post("/predict", authenticateToken, async (req, res) => {
   try {
@@ -160,11 +205,8 @@ app.post("/predict", authenticateToken, async (req, res) => {
           features: req.body,
           recommended_crop: predictionData.recommended_crop,
           confidence: predictionData.confidence,
-          financials: {
-            investment: predictionData.estimated_investment,
-            profit: predictionData.estimated_profit,
-            insight: predictionData.market_insight,
-          },
+          market_prices: predictionData.market_prices || [],
+          price_summary: predictionData.price_summary || null,
         };
         await predictionsCol.insertOne(doc);
       } catch (dbErr) {

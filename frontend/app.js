@@ -465,8 +465,7 @@ document.addEventListener("DOMContentLoaded", () => {
         renderBackendRecommendation(result, values);
       } catch (err) {
         console.error("Backend fetch error:", err);
-        const mock = mockRecommend(values);
-        renderMockRecommendation(mock, values, err);
+        renderBackendError(values, err);
       }
     });
   }
@@ -499,6 +498,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!res.ok) {
       const detail = data && data.detail ? String(data.detail) : `HTTP ${res.status}`;
+      const lowerDetail = detail.toLowerCase();
+      if (res.status === 401 || lowerDetail.includes("expired token") || lowerDetail.includes("invalid token")) {
+        clearSignedInUser();
+        window.location.href = "login.html";
+        throw new Error("Session expired. Please sign in again.");
+      }
       throw new Error(detail);
     }
 
@@ -570,14 +575,101 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const shap = Array.isArray(result.shap_explanation) ? result.shap_explanation : [];
 
-    const formatFin = (val) => {
-      if (val == null) return "N/A";
-      const num = Number(String(val).replace(/,/g, ''));
-      return !isNaN(num) ? num.toLocaleString() : String(val);
-    };
-    const estInvestment = formatFin(result.estimated_investment);
-    const estProfit = formatFin(result.estimated_profit);
-    const marketInsight = result.market_insight ? escapeHtml(result.market_insight) : "No live market insight available (waiting for API key).";
+    // Build mandi prices section
+    const marketPrices = Array.isArray(result.market_prices) ? result.market_prices : [];
+    const priceSummary = result.price_summary || null;
+    const estimatedInvestment = Number(result.estimated_investment || 0);
+    const estimatedProfit = Number(result.estimated_profit || 0);
+    const estimatedInvestmentPerAcre = Number(result.estimated_investment_per_acre || 0);
+    const estimatedProfitPerAcre = Number(result.estimated_profit_per_acre || 0);
+    const assumedYieldQuintalPerAcre = Number(result.assumed_yield_quintal_per_acre || 10);
+    const marketInsight = result.market_insight ? String(result.market_insight) : "";
+
+    let mandiSummaryHTML = '';
+    if (priceSummary || estimatedInvestment > 0 || estimatedProfit > 0) {
+      const investmentPerAcreValue = estimatedInvestmentPerAcre > 0
+        ? estimatedInvestmentPerAcre
+        : (estimatedInvestment > 0
+          ? estimatedInvestment * assumedYieldQuintalPerAcre
+          : Number(priceSummary && priceSummary.min_price ? priceSummary.min_price : 0) * assumedYieldQuintalPerAcre);
+      const profitPerAcreValue = estimatedProfitPerAcre > 0
+        ? estimatedProfitPerAcre
+        : (estimatedProfit > 0
+          ? estimatedProfit * assumedYieldQuintalPerAcre
+        : Number(
+          priceSummary
+            ? (Number(priceSummary.avg_modal_price || 0) - Number(priceSummary.min_price || 0))
+            : 0
+        ) * assumedYieldQuintalPerAcre);
+      const avgModalValue = Number(priceSummary && priceSummary.avg_modal_price ? priceSummary.avg_modal_price : 0);
+
+      mandiSummaryHTML = `
+        <div class="financial-row">
+          <div class="financial-card investment">
+            <div class="fin-label">Estimated Investment</div>
+            <div class="fin-value">₹${investmentPerAcreValue.toLocaleString()} <span class="unit">/ acre</span></div>
+          </div>
+          <div class="financial-card profit">
+            <div class="fin-label">Estimated Profit</div>
+            <div class="fin-value">₹${Math.max(0, profitPerAcreValue).toLocaleString()} <span class="unit">/ acre</span></div>
+          </div>
+          <div class="financial-card investment">
+            <div class="fin-label">Avg Market Price</div>
+            <div class="fin-value">₹${avgModalValue.toLocaleString()} <span class="unit">/ quintal</span></div>
+          </div>
+        </div>
+        <p class="placeholder" style="margin-top:0.4rem;">Per-acre values use assumed yield ${assumedYieldQuintalPerAcre.toFixed(1)} quintal/acre.</p>
+        ${marketInsight ? `<p class="placeholder" style="margin-top:0.4rem;">${escapeHtml(marketInsight)}</p>` : ""}
+      `;
+    }
+
+    let mandiTableHTML = '';
+    if (marketPrices.length > 0) {
+      mandiTableHTML = `
+        <div class="output-section extra-insight">
+          <div class="output-section-title">
+            <span>Live Mandi Prices</span>
+            <span class="output-section-badge">data.gov.in</span>
+          </div>
+          <div class="mandi-table-wrap">
+            <table class="mandi-table">
+              <thead>
+                <tr>
+                  <th>Market</th>
+                  <th>State</th>
+                  <th>Variety</th>
+                  <th>Min ₹</th>
+                  <th>Max ₹</th>
+                  <th>Modal ₹</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${marketPrices.map(r => `
+                  <tr>
+                    <td>${escapeHtml(r.market || '')}</td>
+                    <td>${escapeHtml(r.state || '')}</td>
+                    <td>${escapeHtml(r.variety || '')}</td>
+                    <td>₹${Number(r.min_price).toLocaleString()}</td>
+                    <td>₹${Number(r.max_price).toLocaleString()}</td>
+                    <td>₹${Number(r.modal_price).toLocaleString()}</td>
+                    <td>${escapeHtml(r.arrival_date || '-')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    } else {
+      mandiTableHTML = `
+        <div class="output-section extra-insight">
+          <div class="output-section-title">
+            <span>Live Mandi Prices</span>
+            <span class="output-section-badge">data.gov.in</span>
+          </div>
+          <p class="placeholder" style="margin-top:0.5rem;">No mandi price data available for this commodity.</p>
+        </div>`;
+    }
 
     recommendationOutput.innerHTML = `
       <div class="rec-badge">
@@ -598,28 +690,8 @@ document.addEventListener("DOMContentLoaded", () => {
         <span class="rec-chip">Season: ${values.season || 'N/A'}</span>
       </div>
 
-      <div class="financial-row">
-        <div class="financial-card investment">
-          <div class="fin-label">Estimated Investment</div>
-          <div class="fin-value">₹${estInvestment} <span class="unit">/ acre</span></div>
-        </div>
-        <div class="financial-card profit">
-          <div class="fin-label">Expected Net Profit</div>
-          <div class="fin-value">₹${estProfit} <span class="unit">/ acre</span></div>
-        </div>
-      </div>
-
-      <div class="output-section extra-insight">
-        <div class="output-section-title">
-          <span>AI Market Insight</span>
-          <span class="output-section-badge">Gemini AI</span>
-        </div>
-        <div class="insight-content">
-          <p class="placeholder" style="margin-top: 0.5rem; font-style: italic;">
-            "${marketInsight}"
-          </p>
-        </div>
-      </div>
+      ${mandiSummaryHTML}
+      ${mandiTableHTML}
 
 
       <div class="output-section probability">
@@ -733,27 +805,14 @@ document.addEventListener("DOMContentLoaded", () => {
         <span class="rec-chip">Season: ${values.season || 'N/A'}</span>
       </div>
 
-      <div class="financial-row">
-        <div class="financial-card investment">
-          <div class="fin-label">Estimated Investment</div>
-          <div class="fin-value">₹-- <span class="unit">/ acre</span></div>
-        </div>
-        <div class="financial-card profit">
-          <div class="fin-label">Expected Net Profit</div>
-          <div class="fin-value">₹-- <span class="unit">/ acre</span></div>
-        </div>
-      </div>
-
       <div class="output-section extra-insight">
         <div class="output-section-title">
-          <span>AI Market Insight</span>
-          <span class="output-section-badge">Gemini AI Demo</span>
+          <span>Live Mandi Prices</span>
+          <span class="output-section-badge">data.gov.in (Demo)</span>
         </div>
-        <div class="insight-content">
-          <p class="placeholder" style="margin-top: 0.5rem; font-style: italic;">
-            "Live market data powered by Gemini AI is only available when the backend is running with a valid API key."
-          </p>
-        </div>
+        <p class="placeholder" style="margin-top: 0.5rem;">
+          Live mandi prices are available when the backend is running with a valid data.gov.in API key.
+        </p>
       </div>
 
 
@@ -824,6 +883,30 @@ document.addEventListener("DOMContentLoaded", () => {
           : "Hide explanation details";
       });
     }
+  }
+
+  function renderBackendError(values, err) {
+    if (!recommendationOutput) return;
+    const errText = err ? String(err.message || err) : "Unknown backend error";
+    const locText = values.location ? values.location : "Not specified";
+
+    recommendationOutput.innerHTML = `
+      <div class="output-section extra-insight">
+        <div class="output-section-title">
+          <span>Prediction failed</span>
+          <span class="output-section-badge">Backend</span>
+        </div>
+        <p class="placeholder" style="margin-top:0.5rem;">
+          Could not fetch live prediction and mandi prices from backend.
+        </p>
+        <p class="placeholder" style="margin-top:0.25rem;">
+          Error: ${escapeHtml(errText)}
+        </p>
+        <p class="placeholder" style="margin-top:0.25rem;">
+          Location: ${escapeHtml(locText)}
+        </p>
+      </div>
+    `;
   }
 
   function escapeHtml(str) {
