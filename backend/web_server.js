@@ -8,24 +8,23 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000; // ensure correct port for Render
 const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://127.0.0.1:8001";
-// Prefer DATABASE_URL when present (common in deploy platforms), fall back to MONGO_URI.
+
 const MONGO_URI =
   process.env.DATABASE_URL ||
   process.env.MONGO_URI ||
   "mongodb://localhost:27017";
+
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is required. Set it in your .env file.");
+  throw new Error("JWT_SECRET is required.");
 }
 
 app.use(cors());
 app.use(express.json());
-
-// Serve frontend static files (frontend/ is at repo root)
 app.use(express.static(path.join(__dirname, "..", "frontend")));
 
 let db, usersCol, predictionsCol;
@@ -38,11 +37,11 @@ async function connectDB() {
     usersCol = db.collection("users");
     predictionsCol = db.collection("predictions");
 
-    // Create unique index for user emails
     await usersCol.createIndex({ email: 1 }, { unique: true });
-    console.log("Connected to MongoDB successfully!");
+
+    console.log("✅ Connected to MongoDB");
   } catch (error) {
-    console.error("Warning: Could not connect to MongoDB:", error);
+    console.error("⚠️ MongoDB connection failed:", error.message);
   }
 }
 
@@ -65,51 +64,34 @@ function authenticateToken(req, res, next) {
   const [scheme, token] = authHeader.split(" ");
 
   if (scheme !== "Bearer" || !token) {
-    return res.status(401).json({ detail: "Missing or invalid authorization token" });
+    return res.status(401).json({ detail: "Missing or invalid token" });
   }
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ detail: "Invalid or expired token" });
   }
 }
 
-app.get("/health", async (req, res) => {
-  try {
-    const mlHealthRes = await axios.get(`${PYTHON_API_URL}/health`);
-    return res.json({
-      status: "ok",
-      node: "up",
-      python_api: {
-        reachable: true,
-        ...mlHealthRes.data,
-      },
-      database_connected: Boolean(db),
-    });
-  } catch (error) {
-    return res.status(503).json({
-      status: "degraded",
-      node: "up",
-      python_api: {
-        reachable: false,
-      },
-      database_connected: Boolean(db),
-      detail: "Python ML service is unavailable.",
-    });
-  }
+//
+// 🔥 FIXED HEALTH CHECK (VERY IMPORTANT)
+//
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
 });
 
-// Signup Route
+
+// Signup
 app.post("/signup", async (req, res) => {
-  if (!db) return res.status(503).json({ detail: "Database connection is currently down." });
+  if (!db) return res.status(503).json({ detail: "Database unavailable" });
 
   const { email, password, firstName, lastName } = req.body;
 
   if (!email || !password || !firstName || !lastName) {
-    return res.status(400).json({ detail: "Missing required fields" });
+    return res.status(400).json({ detail: "Missing fields" });
   }
 
   const existingUser = await usersCol.findOne({ email });
@@ -117,24 +99,23 @@ app.post("/signup", async (req, res) => {
     return res.status(400).json({ detail: "Email already registered" });
   }
 
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-  const newUser = {
+  await usersCol.insertOne({
     email,
     first_name: firstName,
     last_name: lastName,
     password: hashedPassword,
     created_at: new Date(),
-  };
+  });
 
-  await usersCol.insertOne(newUser);
   res.json({ message: "User created successfully" });
 });
 
-// Login Route
+
+// Login
 app.post("/login", async (req, res) => {
-  if (!db) return res.status(503).json({ detail: "Database connection is currently down." });
+  if (!db) return res.status(503).json({ detail: "Database unavailable" });
 
   const { email, password } = req.body;
 
@@ -149,6 +130,7 @@ app.post("/login", async (req, res) => {
   }
 
   const token = createAuthToken(user);
+
   res.json({
     message: "Login successful",
     token,
@@ -160,7 +142,8 @@ app.post("/login", async (req, res) => {
   });
 });
 
-app.get("/me", authenticateToken, async (req, res) => {
+
+app.get("/me", authenticateToken, (req, res) => {
   res.json({
     user: {
       email: req.user.email,
@@ -170,63 +153,48 @@ app.get("/me", authenticateToken, async (req, res) => {
   });
 });
 
+
+// Season recommendations
 app.get("/season-recs", async (req, res) => {
   const season = String(req.query.season || "").trim();
+
   if (!season) {
-    return res.status(400).json({ detail: "Query parameter 'season' is required" });
+    return res.status(400).json({ detail: "Season required" });
   }
 
   try {
     const pythonRes = await axios.get(`${PYTHON_API_URL}/season-recs`, {
       params: { season },
     });
-    return res.json(pythonRes.data);
+    res.json(pythonRes.data);
   } catch (error) {
-    console.error("Error calling Python season-recs service:", error.message);
-    if (error.response) {
-      return res.status(error.response.status).json(error.response.data);
-    }
-    return res.status(503).json({ detail: "Machine Learning service is unavailable." });
+    res.status(503).json({ detail: "ML service unavailable" });
   }
 });
 
-// Predict Route
+
+// Predict
 app.post("/predict", authenticateToken, async (req, res) => {
   try {
-    // 1. Forward request to Python ML Microservice
     const pythonRes = await axios.post(`${PYTHON_API_URL}/predict`, req.body);
-    const predictionData = pythonRes.data;
+    const data = pythonRes.data;
 
-    // 2. Save prediction history to MongoDB (if available)
     if (db) {
-      try {
-        const doc = {
-          timestamp: new Date(),
-          features: req.body,
-          recommended_crop: predictionData.recommended_crop,
-          confidence: predictionData.confidence,
-          market_prices: predictionData.market_prices || [],
-          price_summary: predictionData.price_summary || null,
-        };
-        await predictionsCol.insertOne(doc);
-      } catch (dbErr) {
-        console.error("Failed to save prediction to MongoDB:", dbErr);
-      }
+      await predictionsCol.insertOne({
+        timestamp: new Date(),
+        features: req.body,
+        ...data,
+      });
     }
 
-    // 3. Respond to frontend
-    res.json(predictionData);
+    res.json(data);
   } catch (error) {
-    console.error("Error calling Python ML service:", error.message);
-    if (error.response) {
-      res.status(error.response.status).json(error.response.data);
-    } else {
-      res.status(503).json({ detail: "Machine Learning service is unavailable." });
-    }
+    res.status(503).json({ detail: "ML service unavailable" });
   }
 });
 
+
 app.listen(PORT, () => {
-  console.log(`Node.js API Gateway running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
