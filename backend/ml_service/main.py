@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib import parse, request
 
 import numpy as np
@@ -22,7 +22,6 @@ from sklearn.preprocessing import OneHotEncoder
 # PATH CONFIGURATION
 # -----------------------------
 ROOT_DIR = Path(__file__).resolve().parent
-# Dataset is versioned under backend/data/ (see repo .gitignore), not ml_service/data/.
 BACKEND_DIR = ROOT_DIR.parent
 
 load_dotenv(dotenv_path=ROOT_DIR / ".env")
@@ -51,7 +50,7 @@ app.add_middleware(
 )
 
 # -----------------------------
-# MODELS
+# REQUEST / RESPONSE MODELS
 # -----------------------------
 class CropFeatures(BaseModel):
     N: float
@@ -104,7 +103,7 @@ encoded_feature_names = []
 startup_error = None
 
 # -----------------------------
-# CROP MAPPING
+# CROP TO COMMODITY
 # -----------------------------
 CROP_TO_COMMODITY = {
     "rice": "Rice",
@@ -118,7 +117,7 @@ CROP_TO_COMMODITY = {
 DATA_GOV_RESOURCE_ID = "9ef84268-d588-465a-a308-a864a43d0070"
 
 # -----------------------------
-# MANDI PRICE FETCH
+# FETCH MANDI PRICES
 # -----------------------------
 def fetch_mandi_prices(crop: str):
 
@@ -137,6 +136,7 @@ def fetch_mandi_prices(crop: str):
     )
 
     try:
+
         url = (
             f"https://api.data.gov.in/resource/{DATA_GOV_RESOURCE_ID}"
             f"?api-key={parse.quote(api_key)}"
@@ -151,6 +151,7 @@ def fetch_mandi_prices(crop: str):
         )
 
         with request.urlopen(req, timeout=20) as response:
+
             payload = json.loads(
                 response.read().decode("utf-8")
             )
@@ -159,38 +160,46 @@ def fetch_mandi_prices(crop: str):
 
         if not records:
             return {
-                "market_insight": f"No mandi data found for {commodity}"
+                "market_insight":
+                f"No mandi data found for {commodity}"
             }
 
         prices = []
 
         for rec in records:
+
             try:
+
                 prices.append(
                     float(rec.get("modal_price", 0))
                 )
+
             except:
                 pass
 
         if not prices:
             return {
-                "market_insight": f"No valid market prices for {commodity}"
+                "market_insight":
+                f"No valid prices for {commodity}"
             }
 
-        avg_price = round(sum(prices) / len(prices), 2)
+        avg_price = round(
+            sum(prices) / len(prices),
+            2
+        )
 
         return {
-            "market_insight": (
-                f"{commodity} average mandi price: "
-                f"Rs {avg_price}/quintal"
-            )
+            "market_insight":
+            f"{commodity} average mandi price: Rs {avg_price}/quintal"
         }
 
     except Exception as e:
-        print("Mandi API Error:", e)
+
+        print("MANDI API ERROR:", e)
 
         return {
-            "market_insight": "Unable to fetch mandi prices."
+            "market_insight":
+            "Unable to fetch mandi prices."
         }
 
 
@@ -206,6 +215,7 @@ def load_and_train_model():
     global encoded_feature_names
 
     if not DATA_PATH.exists():
+
         raise RuntimeError(
             f"Dataset not found: {DATA_PATH}"
         )
@@ -213,6 +223,7 @@ def load_and_train_model():
     df = pd.read_csv(DATA_PATH)
 
     if "Humidity" in df.columns:
+
         df.rename(
             columns={"Humidity": "humidity"},
             inplace=True
@@ -273,7 +284,8 @@ def load_and_train_model():
     encoded_feature_names = (
         numeric_features
         + list(
-            preprocessor_obj.named_transformers_["cat"]
+            preprocessor_obj
+            .named_transformers_["cat"]
             .get_feature_names_out(categorical_features)
         )
     )
@@ -288,26 +300,35 @@ def startup_event():
     global startup_error
 
     try:
+
         load_and_train_model()
 
         startup_error = None
 
+        print("✅ Model loaded successfully")
+
     except Exception as e:
+
         startup_error = str(e)
 
-        print("Startup Error:", e)
+        print("STARTUP ERROR:", e)
 
 
 # -----------------------------
-# HEALTH ROUTE
+# ROOT
 # -----------------------------
 @app.get("/")
 def root():
+
     return {
-        "message": "Crop Recommendation API Running"
+        "message":
+        "Crop Recommendation API Running"
     }
 
 
+# -----------------------------
+# HEALTH
+# -----------------------------
 @app.get("/health")
 def health():
 
@@ -319,7 +340,7 @@ def health():
 
 
 # -----------------------------
-# PREDICT ROUTE
+# PREDICT
 # -----------------------------
 @app.post(
     "/predict",
@@ -329,99 +350,137 @@ def predict(features: CropFeatures):
 
     if (
         rf_model is None
-        or shap_explainer is None
         or preprocessor is None
     ):
+
         raise HTTPException(
             status_code=503,
             detail=startup_error or "Model not loaded"
         )
 
-    input_df = pd.DataFrame({
-        "N": [features.N],
-        "P": [features.P],
-        "K": [features.K],
-        "Temperature": [features.temperature],
-        "humidity": [features.humidity],
-        "pH": [features.ph],
-        "Rainfall": [features.rainfall],
-        "Season": [features.Season],
-    })
-
     try:
+
+        input_df = pd.DataFrame({
+            "N": [features.N],
+            "P": [features.P],
+            "K": [features.K],
+            "Temperature": [features.temperature],
+            "humidity": [features.humidity],
+            "pH": [features.ph],
+            "Rainfall": [features.rainfall],
+            "Season": [features.Season],
+        })
+
         x = preprocessor.transform(input_df)
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Preprocessing error: {e}"
-        )
+        proba = rf_model.predict_proba(x)[0]
 
-    proba = rf_model.predict_proba(x)[0]
+        best_idx = int(np.argmax(proba))
 
-    best_idx = int(np.argmax(proba))
+        recommended_crop = class_names[best_idx]
 
-    recommended_crop = class_names[best_idx]
+        confidence = float(proba[best_idx])
 
-    confidence = float(proba[best_idx])
-
-    prob_dict = {
-        str(cls): float(p)
-        for cls, p in zip(class_names, proba)
-    }
-
-    shap_values = shap_explainer.shap_values(x)
-
-    try:
-        class_shap_vals = shap_values[best_idx][0]
-
-    except:
-        class_shap_vals = shap_values[0]
-
-    shap_pairs = []
-
-    for i in range(
-        min(
-            len(encoded_feature_names),
-            len(class_shap_vals)
-        )
-    ):
-        shap_pairs.append(
-            (
-                encoded_feature_names[i],
-                class_shap_vals[i]
-            )
-        )
-
-    shap_pairs.sort(
-        key=lambda item: abs(item[1]),
-        reverse=True
-    )
-
-    shap_pairs = shap_pairs[:5]
-
-    shap_explanation = [
-        {
-            "feature": name,
-            "weight": float(weight)
+        prob_dict = {
+            str(cls): float(p)
+            for cls, p in zip(class_names, proba)
         }
-        for name, weight in shap_pairs
-    ]
 
-    mandi_data = fetch_mandi_prices(
-        recommended_crop
-    )
+        # -----------------------------
+        # SAFE SHAP
+        # -----------------------------
+        shap_explanation = []
 
-    return {
-        "recommended_crop": recommended_crop,
-        "confidence": confidence,
-        "class_probabilities": prob_dict,
-        "shap_explanation": shap_explanation,
-        "market_insight": mandi_data.get(
-            "market_insight",
-            ""
-        ),
-    }
+        try:
+
+            if shap_explainer is not None:
+
+                shap_values = shap_explainer.shap_values(x)
+
+                if isinstance(shap_values, list):
+
+                    class_shap_vals = shap_values[best_idx][0]
+
+                else:
+
+                    class_shap_vals = shap_values[0]
+
+                shap_pairs = []
+
+                for i in range(
+                    min(
+                        len(encoded_feature_names),
+                        len(class_shap_vals)
+                    )
+                ):
+
+                    shap_pairs.append(
+                        (
+                            encoded_feature_names[i],
+                            float(class_shap_vals[i])
+                        )
+                    )
+
+                shap_pairs.sort(
+                    key=lambda item: abs(item[1]),
+                    reverse=True
+                )
+
+                shap_pairs = shap_pairs[:5]
+
+                shap_explanation = [
+                    {
+                        "feature": name,
+                        "weight": weight
+                    }
+                    for name, weight in shap_pairs
+                ]
+
+        except Exception as shap_error:
+
+            print("SHAP ERROR:", shap_error)
+
+            shap_explanation = []
+
+        # -----------------------------
+        # SAFE MANDI FETCH
+        # -----------------------------
+        market_insight = ""
+
+        try:
+
+            mandi_data = fetch_mandi_prices(
+                recommended_crop
+            )
+
+            market_insight = mandi_data.get(
+                "market_insight",
+                ""
+            )
+
+        except Exception as mandi_error:
+
+            print("MANDI ERROR:", mandi_error)
+
+        # -----------------------------
+        # RESPONSE
+        # -----------------------------
+        return {
+            "recommended_crop": recommended_crop,
+            "confidence": confidence,
+            "class_probabilities": prob_dict,
+            "shap_explanation": shap_explanation,
+            "market_insight": market_insight,
+        }
+
+    except Exception as e:
+
+        print("PREDICT ERROR:", str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 
 # -----------------------------
