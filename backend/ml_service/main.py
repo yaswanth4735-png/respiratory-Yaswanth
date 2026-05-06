@@ -103,14 +103,30 @@ encoded_feature_names = []
 startup_error = None
 
 # -----------------------------
-# CROP TO COMMODITY
+# CROP TO COMMODITY MAPPING
 # -----------------------------
 CROP_TO_COMMODITY = {
     "rice": "Rice",
     "maize": "Maize",
+    "chickpea": "Gram",
+    "kidneybeans": "Rajma",
+    "pigeonpeas": "Arhar (Tur/Red Gram)(Whole)",
+    "mothbeans": "Moth",
+    "mungbean": "Moong Dal",
+    "blackgram": "Black Gram (Urd Beans)(Whole)",
+    "lentil": "Masur Dal",
+    "pomegranate": "Pomegranate",
     "banana": "Banana",
     "mango": "Mango",
+    "grapes": "Grapes",
+    "watermelon": "Water Melon",
+    "muskmelon": "Musk Melon",
+    "apple": "Apple",
+    "orange": "Orange",
+    "papaya": "Papaya",
+    "coconut": "Coconut",
     "cotton": "Cotton",
+    "jute": "Jute",
     "coffee": "Coffee",
 }
 
@@ -141,7 +157,7 @@ def fetch_mandi_prices(crop: str):
             f"https://api.data.gov.in/resource/{DATA_GOV_RESOURCE_ID}"
             f"?api-key={parse.quote(api_key)}"
             f"&format=json"
-            f"&limit=5"
+            f"&limit=20"
             f"&filters[commodity]={parse.quote(commodity)}"
         )
 
@@ -161,7 +177,7 @@ def fetch_mandi_prices(crop: str):
         if not records:
             return {
                 "market_insight":
-                f"No mandi data found for {commodity}"
+                f"No mandi price data available for {commodity}."
             }
 
         prices = []
@@ -180,7 +196,7 @@ def fetch_mandi_prices(crop: str):
         if not prices:
             return {
                 "market_insight":
-                f"No valid prices for {commodity}"
+                f"No valid mandi prices for {commodity}."
             }
 
         avg_price = round(
@@ -387,7 +403,7 @@ def predict(features: CropFeatures):
         }
 
         # -----------------------------
-        # SAFE SHAP
+        # SHAP EXPLANATION
         # -----------------------------
         shap_explanation = []
 
@@ -397,13 +413,19 @@ def predict(features: CropFeatures):
 
                 shap_values = shap_explainer.shap_values(x)
 
-                if isinstance(shap_values, list):
+                shap_array = np.array(shap_values)
 
-                    class_shap_vals = shap_values[best_idx][0]
+                if shap_array.ndim == 3:
+
+                    class_shap_vals = shap_array[0, :, best_idx]
+
+                elif shap_array.ndim == 2:
+
+                    class_shap_vals = shap_array[0]
 
                 else:
 
-                    class_shap_vals = shap_values[0]
+                    class_shap_vals = shap_array.flatten()
 
                 shap_pairs = []
 
@@ -430,20 +452,20 @@ def predict(features: CropFeatures):
 
                 shap_explanation = [
                     {
-                        "feature": name,
+                        "feature": feature,
                         "weight": weight
                     }
-                    for name, weight in shap_pairs
+                    for feature, weight in shap_pairs
                 ]
 
         except Exception as shap_error:
 
-            print("SHAP ERROR:", shap_error)
+            print("SHAP ERROR:", str(shap_error))
 
             shap_explanation = []
 
         # -----------------------------
-        # SAFE MANDI FETCH
+        # MANDI PRICES
         # -----------------------------
         market_insight = ""
 
