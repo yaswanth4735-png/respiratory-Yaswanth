@@ -394,7 +394,8 @@ def root():
 # -----------------------------
 # HEALTH
 # -----------------------------
-@app.get("/health")
+@app.api_route("/health",maethods=["GET","HEAD"])
+
 def health():
 
     return {
