@@ -23,8 +23,9 @@ from sklearn.preprocessing import OneHotEncoder
 # -----------------------------
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR.parent
+PROJECT_DIR = BACKEND_DIR.parent
 
-load_dotenv(dotenv_path=ROOT_DIR / ".env")
+load_dotenv(dotenv_path=PROJECT_DIR / ".env")
 
 DATA_PATH = BACKEND_DIR / "data" / "indian_agri_dataset_15k.csv"
 
@@ -76,6 +77,8 @@ class PredictionResponse(BaseModel):
     class_probabilities: Dict[str, float]
     shap_explanation: List[Dict[str, Any]]
     market_insight: str = ""
+    market_prices: List[Dict[str, Any]] = []
+    price_summary: Dict[str, Any] = {}
 
 
 # -----------------------------
@@ -136,7 +139,9 @@ def fetch_mandi_prices(crop: str):
     if not api_key:
         return {
             "market_insight":
-            "DATA_GOV_API_KEY not configured."
+            "DATA_GOV_API_KEY not configured.",
+            "market_prices": [],
+            "price_summary": {}
         }
 
     crop_key = crop.lower().strip()
@@ -227,12 +232,18 @@ def fetch_mandi_prices(crop: str):
                 "market_insight":
                 (
                     f"{commodity} mandi prices "
-                    f"(data.gov.in) → "
+                    f"(data.gov.in) -> "
                     f"Avg: Rs {avg_price}/quintal | "
                     f"Min: Rs {min_price} | "
                     f"Max: Rs {max_price} | "
                     f"Markets: {top_markets}"
-                )
+                ),
+                "market_prices": records,
+                "price_summary": {
+                    "min_price": min_price,
+                    "max_price": max_price,
+                    "avg_modal_price": avg_price
+                }
             }
 
         return {
@@ -240,7 +251,9 @@ def fetch_mandi_prices(crop: str):
             (
                 f"No live mandi data found for "
                 f"{crop.title()} today."
-            )
+            ),
+            "market_prices": [],
+            "price_summary": {}
         }
 
     except Exception as e:
@@ -249,7 +262,9 @@ def fetch_mandi_prices(crop: str):
 
         return {
             "market_insight":
-            "Unable to fetch mandi prices."
+            "Unable to fetch mandi prices.",
+            "market_prices": [],
+            "price_summary": {}
         }
 
 
@@ -355,7 +370,7 @@ def startup_event():
 
         startup_error = None
 
-        print("✅ Model loaded successfully")
+        print("Model loaded successfully")
 
     except Exception as e:
 
@@ -509,6 +524,8 @@ def predict(features: CropFeatures):
             "market_insight",
             ""
         )
+        market_prices = mandi_data.get("market_prices", [])
+        price_summary = mandi_data.get("price_summary", {})
 
         # -----------------------------
         # RESPONSE
@@ -519,6 +536,8 @@ def predict(features: CropFeatures):
             "class_probabilities": prob_dict,
             "shap_explanation": shap_explanation,
             "market_insight": market_insight,
+            "market_prices": market_prices,
+            "price_summary": price_summary,
         }
 
     except Exception as e:
