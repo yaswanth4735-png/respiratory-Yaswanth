@@ -22,11 +22,13 @@ from sklearn.preprocessing import OneHotEncoder
 # PATH CONFIGURATION
 # -----------------------------
 ROOT_DIR = Path(__file__).resolve().parent
+# Dataset is versioned under backend/data/ (see repo .gitignore), not ml_service/data/.
+BACKEND_DIR = ROOT_DIR.parent
 
 load_dotenv(dotenv_path=ROOT_DIR / ".env")
 
-DATA_PATH = ROOT_DIR / "data" / "indian_agri_dataset_15k.csv"
-SEASON_RECS_PATH = ROOT_DIR / "data" / "season_recs.json"
+DATA_PATH = BACKEND_DIR / "data" / "indian_agri_dataset_15k.csv"
+SEASON_RECS_PATH = BACKEND_DIR / "data" / "season_recs.json"
 
 # -----------------------------
 # FASTAPI APP
