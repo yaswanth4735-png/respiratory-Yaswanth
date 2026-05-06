@@ -9,7 +9,37 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 10000; // ensure correct port for Render
-const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://127.0.0.1:8001";
+
+/** Base URL for the FastAPI ML service (no trailing slash). */
+function normalizePythonBaseUrl(url) {
+  return String(url || "")
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+const PYTHON_API_URL = normalizePythonBaseUrl(
+  process.env.PYTHON_API_URL || "http://127.0.0.1:8001",
+);
+
+/** Render free-tier cold starts can exceed 60s; keep configurable. */
+const PYTHON_API_TIMEOUT_MS = parseInt(
+  process.env.PYTHON_API_TIMEOUT_MS || "120000",
+  10,
+);
+const PYTHON_API_MAX_RETRIES = parseInt(
+  process.env.PYTHON_API_MAX_RETRIES || "3",
+  10,
+);
+
+if (
+  process.env.RENDER &&
+  (PYTHON_API_URL.includes("127.0.0.1") || PYTHON_API_URL.includes("localhost"))
+) {
+  console.error(
+    "⚠️ PYTHON_API_URL points at localhost while running on Render. " +
+      "Set PYTHON_API_URL to your crop-ml-api service URL (Blueprint wires this via RENDER_EXTERNAL_URL).",
+  );
+}
 
 const MONGO_URI =
   process.env.DATABASE_URL ||
@@ -46,6 +76,57 @@ async function connectDB() {
 }
 
 connectDB();
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True for cold-start / proxy issues; not for application-level 503 from FastAPI. */
+function isRetryableMlProxyError(error) {
+  if (!error.response) {
+    const c = error.code;
+    return (
+      c === "ECONNRESET" ||
+      c === "ETIMEDOUT" ||
+      c === "ECONNABORTED" ||
+      c === "ECONNREFUSED" ||
+      c === "ENOTFOUND" ||
+      c === "EAI_AGAIN"
+    );
+  }
+  const s = error.response.status;
+  return s === 502 || s === 504;
+}
+
+function mlHttpDetail(error) {
+  const d = error.response?.data?.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d))
+    return d
+      .map((x) => (x && typeof x.msg === "string" ? x.msg : String(x)))
+      .join("; ");
+  return null;
+}
+
+async function callPythonAxios(requestFn) {
+  let lastError;
+  for (let attempt = 1; attempt <= PYTHON_API_MAX_RETRIES; attempt += 1) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableMlProxyError(error) || attempt === PYTHON_API_MAX_RETRIES) {
+        throw error;
+      }
+      const delay = Math.min(2000 * attempt, 15000);
+      console.warn(
+        `ML service request attempt ${attempt}/${PYTHON_API_MAX_RETRIES} failed (${error.code || error.response?.status}); retry in ${delay}ms`,
+      );
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
 
 function createAuthToken(user) {
   return jwt.sign(
@@ -163,12 +244,21 @@ app.get("/season-recs", async (req, res) => {
   }
 
   try {
-    const pythonRes = await axios.get(`${PYTHON_API_URL}/season-recs`, {
-      params: { season },
-    });
+    const pythonRes = await callPythonAxios(() =>
+      axios.get(`${PYTHON_API_URL}/season-recs`, {
+        params: { season },
+        timeout: PYTHON_API_TIMEOUT_MS,
+      }),
+    );
     res.json(pythonRes.data);
   } catch (error) {
-    res.status(503).json({ detail: "ML service unavailable" });
+    const forwarded = mlHttpDetail(error);
+    console.error("season-recs ML error:", error.message, error.response?.status);
+    res.status(503).json({
+      detail:
+        forwarded ||
+        "ML service unavailable (check PYTHON_API_URL or cold start — try again).",
+    });
   }
 });
 
@@ -176,7 +266,11 @@ app.get("/season-recs", async (req, res) => {
 // Predict
 app.post("/predict", authenticateToken, async (req, res) => {
   try {
-    const pythonRes = await axios.post(`${PYTHON_API_URL}/predict`, req.body);
+    const pythonRes = await callPythonAxios(() =>
+      axios.post(`${PYTHON_API_URL}/predict`, req.body, {
+        timeout: PYTHON_API_TIMEOUT_MS,
+      }),
+    );
     const data = pythonRes.data;
 
     if (db) {
@@ -189,7 +283,13 @@ app.post("/predict", authenticateToken, async (req, res) => {
 
     res.json(data);
   } catch (error) {
-    res.status(503).json({ detail: "ML service unavailable" });
+    const forwarded = mlHttpDetail(error);
+    console.error("predict ML error:", error.message, error.response?.status);
+    res.status(503).json({
+      detail:
+        forwarded ||
+        "ML service unavailable (check PYTHON_API_URL or cold start — try again).",
+    });
   }
 });
 

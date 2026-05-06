@@ -35,7 +35,9 @@ services:
         value: 7d
       - key: DATABASE_URL
         sync: false
-      # After crop-ml-api is deployed, set this to its URL, e.g.
-      # https://crop-ml-api-xxxx.onrender.com
+      # Public URL of the ML service (same workspace). Override in Dashboard if needed.
       - key: PYTHON_API_URL
-        sync: false
+        fromService:
+          name: crop-ml-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
