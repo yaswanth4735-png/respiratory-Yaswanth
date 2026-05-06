@@ -105,14 +105,14 @@ startup_error = None
 # CROP COMMODITY MAPPING
 # -----------------------------
 CROP_TO_COMMODITY = {
-    "rice": ["Rice", "Paddy"],
+    "rice": ["Rice", "Paddy", "Paddy(Dhan)(Common)"],
     "maize": ["Makka", "Maize", "Corn"],
     "chickpea": ["Gram", "Bengal Gram"],
     "kidneybeans": ["Rajma"],
-    "pigeonpeas": ["Arhar (Tur/Red Gram)(Whole)", "Tur"],
-    "mungbean": ["Moong Dal", "Green Gram"],
-    "blackgram": ["Black Gram", "Urd"],
-    "lentil": ["Masur Dal", "Lentil"],
+    "pigeonpeas": ["Arhar", "Tur"],
+    "mungbean": ["Moong", "Green Gram"],
+    "blackgram": ["Urd", "Black Gram"],
+    "lentil": ["Masur", "Lentil"],
     "banana": ["Banana"],
     "mango": ["Mango"],
     "grapes": ["Grapes"],
@@ -150,20 +150,24 @@ def fetch_mandi_prices(crop: str):
 
         for commodity in possible_commodities:
 
+            print(f"Trying commodity: {commodity}")
+
             url = (
                 f"https://api.data.gov.in/resource/{DATA_GOV_RESOURCE_ID}"
                 f"?api-key={parse.quote(api_key)}"
                 f"&format=json"
-                f"&limit=20"
+                f"&limit=50"
                 f"&filters[commodity]={parse.quote(commodity)}"
             )
 
             req = request.Request(
                 url,
-                headers={"User-Agent": "crop-app"}
+                headers={
+                    "User-Agent": "crop-app"
+                }
             )
 
-            with request.urlopen(req, timeout=20) as response:
+            with request.urlopen(req, timeout=30) as response:
 
                 payload = json.loads(
                     response.read().decode("utf-8")
@@ -171,10 +175,14 @@ def fetch_mandi_prices(crop: str):
 
             records = payload.get("records", [])
 
+            print("Records found:", len(records))
+
             if not records:
                 continue
 
             prices = []
+
+            markets = []
 
             for rec in records:
 
@@ -184,11 +192,18 @@ def fetch_mandi_prices(crop: str):
                         rec.get("modal_price", 0)
                     )
 
+                    market = rec.get("market", "")
+
                     if modal_price > 0:
+
                         prices.append(modal_price)
 
-                except:
-                    pass
+                        if market:
+                            markets.append(market)
+
+                except Exception as e:
+
+                    print("Price parse error:", e)
 
             if not prices:
                 continue
@@ -198,29 +213,39 @@ def fetch_mandi_prices(crop: str):
                 2
             )
 
+            min_price = round(min(prices), 2)
+
             max_price = round(max(prices), 2)
 
-            min_price = round(min(prices), 2)
+            unique_markets = list(set(markets))
+
+            top_markets = ", ".join(
+                unique_markets[:5]
+            )
 
             return {
                 "market_insight":
                 (
                     f"{commodity} mandi prices "
                     f"(data.gov.in) → "
-                    f"Avg: Rs {avg_price}/quintal, "
-                    f"Min: Rs {min_price}, "
-                    f"Max: Rs {max_price}"
+                    f"Avg: Rs {avg_price}/quintal | "
+                    f"Min: Rs {min_price} | "
+                    f"Max: Rs {max_price} | "
+                    f"Markets: {top_markets}"
                 )
             }
 
         return {
             "market_insight":
-            f"No mandi price data available for {crop.title()}."
+            (
+                f"No live mandi data found for "
+                f"{crop.title()} today."
+            )
         }
 
     except Exception as e:
 
-        print("MANDI API ERROR:", e)
+        print("MANDI API ERROR:", str(e))
 
         return {
             "market_insight":
