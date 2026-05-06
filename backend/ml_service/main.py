@@ -27,7 +27,6 @@ BACKEND_DIR = ROOT_DIR.parent
 load_dotenv(dotenv_path=ROOT_DIR / ".env")
 
 DATA_PATH = BACKEND_DIR / "data" / "indian_agri_dataset_15k.csv"
-SEASON_RECS_PATH = BACKEND_DIR / "data" / "season_recs.json"
 
 # -----------------------------
 # FASTAPI APP
@@ -103,31 +102,26 @@ encoded_feature_names = []
 startup_error = None
 
 # -----------------------------
-# CROP TO COMMODITY MAPPING
+# CROP COMMODITY MAPPING
 # -----------------------------
 CROP_TO_COMMODITY = {
-    "rice": "Rice",
-    "maize": "Maize",
-    "chickpea": "Gram",
-    "kidneybeans": "Rajma",
-    "pigeonpeas": "Arhar (Tur/Red Gram)(Whole)",
-    "mothbeans": "Moth",
-    "mungbean": "Moong Dal",
-    "blackgram": "Black Gram (Urd Beans)(Whole)",
-    "lentil": "Masur Dal",
-    "pomegranate": "Pomegranate",
-    "banana": "Banana",
-    "mango": "Mango",
-    "grapes": "Grapes",
-    "watermelon": "Water Melon",
-    "muskmelon": "Musk Melon",
-    "apple": "Apple",
-    "orange": "Orange",
-    "papaya": "Papaya",
-    "coconut": "Coconut",
-    "cotton": "Cotton",
-    "jute": "Jute",
-    "coffee": "Coffee",
+    "rice": ["Rice", "Paddy"],
+    "maize": ["Makka", "Maize", "Corn"],
+    "chickpea": ["Gram", "Bengal Gram"],
+    "kidneybeans": ["Rajma"],
+    "pigeonpeas": ["Arhar (Tur/Red Gram)(Whole)", "Tur"],
+    "mungbean": ["Moong Dal", "Green Gram"],
+    "blackgram": ["Black Gram", "Urd"],
+    "lentil": ["Masur Dal", "Lentil"],
+    "banana": ["Banana"],
+    "mango": ["Mango"],
+    "grapes": ["Grapes"],
+    "apple": ["Apple"],
+    "orange": ["Orange"],
+    "papaya": ["Papaya"],
+    "cotton": ["Cotton"],
+    "jute": ["Jute"],
+    "coffee": ["Coffee"],
 }
 
 DATA_GOV_RESOURCE_ID = "9ef84268-d588-465a-a308-a864a43d0070"
@@ -141,72 +135,87 @@ def fetch_mandi_prices(crop: str):
 
     if not api_key:
         return {
-            "market_insight": "DATA_GOV_API_KEY not configured."
+            "market_insight":
+            "DATA_GOV_API_KEY not configured."
         }
 
     crop_key = crop.lower().strip()
 
-    commodity = CROP_TO_COMMODITY.get(
+    possible_commodities = CROP_TO_COMMODITY.get(
         crop_key,
-        crop.title()
+        [crop.title()]
     )
 
     try:
 
-        url = (
-            f"https://api.data.gov.in/resource/{DATA_GOV_RESOURCE_ID}"
-            f"?api-key={parse.quote(api_key)}"
-            f"&format=json"
-            f"&limit=20"
-            f"&filters[commodity]={parse.quote(commodity)}"
-        )
+        for commodity in possible_commodities:
 
-        req = request.Request(
-            url,
-            headers={"User-Agent": "crop-app"}
-        )
-
-        with request.urlopen(req, timeout=20) as response:
-
-            payload = json.loads(
-                response.read().decode("utf-8")
+            url = (
+                f"https://api.data.gov.in/resource/{DATA_GOV_RESOURCE_ID}"
+                f"?api-key={parse.quote(api_key)}"
+                f"&format=json"
+                f"&limit=20"
+                f"&filters[commodity]={parse.quote(commodity)}"
             )
 
-        records = payload.get("records", [])
+            req = request.Request(
+                url,
+                headers={"User-Agent": "crop-app"}
+            )
 
-        if not records:
-            return {
-                "market_insight":
-                f"No mandi price data available for {commodity}."
-            }
+            with request.urlopen(req, timeout=20) as response:
 
-        prices = []
-
-        for rec in records:
-
-            try:
-
-                prices.append(
-                    float(rec.get("modal_price", 0))
+                payload = json.loads(
+                    response.read().decode("utf-8")
                 )
 
-            except:
-                pass
+            records = payload.get("records", [])
 
-        if not prices:
+            if not records:
+                continue
+
+            prices = []
+
+            for rec in records:
+
+                try:
+
+                    modal_price = float(
+                        rec.get("modal_price", 0)
+                    )
+
+                    if modal_price > 0:
+                        prices.append(modal_price)
+
+                except:
+                    pass
+
+            if not prices:
+                continue
+
+            avg_price = round(
+                sum(prices) / len(prices),
+                2
+            )
+
+            max_price = round(max(prices), 2)
+
+            min_price = round(min(prices), 2)
+
             return {
                 "market_insight":
-                f"No valid mandi prices for {commodity}."
+                (
+                    f"{commodity} mandi prices "
+                    f"(data.gov.in) → "
+                    f"Avg: Rs {avg_price}/quintal, "
+                    f"Min: Rs {min_price}, "
+                    f"Max: Rs {max_price}"
+                )
             }
-
-        avg_price = round(
-            sum(prices) / len(prices),
-            2
-        )
 
         return {
             "market_insight":
-            f"{commodity} average mandi price: Rs {avg_price}/quintal"
+            f"No mandi price data available for {crop.title()}."
         }
 
     except Exception as e:
@@ -465,24 +474,16 @@ def predict(features: CropFeatures):
             shap_explanation = []
 
         # -----------------------------
-        # MANDI PRICES
+        # MANDI PRICE FETCH
         # -----------------------------
-        market_insight = ""
+        mandi_data = fetch_mandi_prices(
+            recommended_crop
+        )
 
-        try:
-
-            mandi_data = fetch_mandi_prices(
-                recommended_crop
-            )
-
-            market_insight = mandi_data.get(
-                "market_insight",
-                ""
-            )
-
-        except Exception as mandi_error:
-
-            print("MANDI ERROR:", mandi_error)
+        market_insight = mandi_data.get(
+            "market_insight",
+            ""
+        )
 
         # -----------------------------
         # RESPONSE
