@@ -394,7 +394,7 @@ def root():
 # -----------------------------
 # HEALTH
 # -----------------------------
-@app.api_route("/health",maethods=["GET","HEAD"])
+@app.api_route("/health",methods=["GET","HEAD"])
 
 def health():
 
