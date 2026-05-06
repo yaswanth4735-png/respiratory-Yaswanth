@@ -1,4 +1,5 @@
 require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -8,83 +9,132 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 
 const app = express();
-const PORT = process.env.PORT || 10000; // ensure correct port for Render
 
-/** Base URL for the FastAPI ML service (no trailing slash). */
+const PORT = process.env.PORT || 10000;
+
+// ----------------------------
+// PYTHON ML API URL
+// ----------------------------
 function normalizePythonBaseUrl(url) {
   return String(url || "")
     .trim()
     .replace(/\/+$/, "");
 }
 
-const PYTHON_API_URL = normalizePythonBaseUrl(
-  process.env.PYTHON_API_URL || "http://127.0.0.1:8001",
-);
-
-/** Render free-tier cold starts can exceed 60s; keep configurable. */
-const PYTHON_API_TIMEOUT_MS = parseInt(
-  process.env.PYTHON_API_TIMEOUT_MS || "120000",
-  10,
-);
-const PYTHON_API_MAX_RETRIES = parseInt(
-  process.env.PYTHON_API_MAX_RETRIES || "3",
-  10,
-);
-
-if (
-  process.env.RENDER &&
-  (PYTHON_API_URL.includes("127.0.0.1") || PYTHON_API_URL.includes("localhost"))
-) {
-  console.error(
-    "⚠️ PYTHON_API_URL points at localhost while running on Render. " +
-      "Set PYTHON_API_URL to your crop-ml-api service URL (Blueprint wires this via RENDER_EXTERNAL_URL).",
+if (!process.env.PYTHON_API_URL) {
+  throw new Error(
+    "PYTHON_API_URL environment variable is required"
   );
 }
 
+const PYTHON_API_URL = normalizePythonBaseUrl(
+  process.env.PYTHON_API_URL
+);
+
+console.log("Using ML API:", PYTHON_API_URL);
+
+// ----------------------------
+// TIMEOUTS
+// ----------------------------
+const PYTHON_API_TIMEOUT_MS = parseInt(
+  process.env.PYTHON_API_TIMEOUT_MS || "120000",
+  10
+);
+
+const PYTHON_API_MAX_RETRIES = parseInt(
+  process.env.PYTHON_API_MAX_RETRIES || "3",
+  10
+);
+
+// ----------------------------
+// MONGODB
+// ----------------------------
 const MONGO_URI =
   process.env.DATABASE_URL ||
-  process.env.MONGO_URI ||
-  "mongodb://localhost:27017";
+  process.env.MONGO_URI;
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
-
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is required.");
+if (!MONGO_URI) {
+  throw new Error("MongoDB URI missing");
 }
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "..", "frontend")));
+// ----------------------------
+// JWT
+// ----------------------------
+const JWT_SECRET = process.env.JWT_SECRET;
 
-let db, usersCol, predictionsCol;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is required");
+}
+
+const JWT_EXPIRES_IN =
+  process.env.JWT_EXPIRES_IN || "7d";
+
+// ----------------------------
+// EXPRESS
+// ----------------------------
+app.use(cors());
+
+app.use(express.json());
+
+app.use(
+  express.static(
+    path.join(__dirname, "..", "frontend")
+  )
+);
+
+// ----------------------------
+// DATABASE
+// ----------------------------
+let db;
+let usersCol;
+let predictionsCol;
 
 async function connectDB() {
   try {
+
     const client = new MongoClient(MONGO_URI);
+
     await client.connect();
+
     db = client.db("crop_recommendation_db");
+
     usersCol = db.collection("users");
+
     predictionsCol = db.collection("predictions");
 
-    await usersCol.createIndex({ email: 1 }, { unique: true });
+    await usersCol.createIndex(
+      { email: 1 },
+      { unique: true }
+    );
 
-    console.log("✅ Connected to MongoDB");
+    console.log("✅ MongoDB connected");
+
   } catch (error) {
-    console.error("⚠️ MongoDB connection failed:", error.message);
+
+    console.error(
+      "MongoDB connection failed:",
+      error.message
+    );
   }
 }
 
 connectDB();
 
+// ----------------------------
+// HELPERS
+// ----------------------------
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) =>
+    setTimeout(resolve, ms)
+  );
 }
 
-/** True for cold-start / proxy issues; not for application-level 503 from FastAPI. */
 function isRetryableMlProxyError(error) {
+
   if (!error.response) {
+
     const c = error.code;
+
     return (
       c === "ECONNRESET" ||
       c === "ETIMEDOUT" ||
@@ -94,41 +144,73 @@ function isRetryableMlProxyError(error) {
       c === "EAI_AGAIN"
     );
   }
+
   const s = error.response.status;
+
   return s === 502 || s === 504;
 }
 
 function mlHttpDetail(error) {
+
   const d = error.response?.data?.detail;
+
   if (typeof d === "string") return d;
-  if (Array.isArray(d))
+
+  if (Array.isArray(d)) {
+
     return d
-      .map((x) => (x && typeof x.msg === "string" ? x.msg : String(x)))
+      .map((x) =>
+        x?.msg ? x.msg : String(x)
+      )
       .join("; ");
+  }
+
   return null;
 }
 
 async function callPythonAxios(requestFn) {
+
   let lastError;
-  for (let attempt = 1; attempt <= PYTHON_API_MAX_RETRIES; attempt += 1) {
+
+  for (
+    let attempt = 1;
+    attempt <= PYTHON_API_MAX_RETRIES;
+    attempt++
+  ) {
+
     try {
+
       return await requestFn();
+
     } catch (error) {
+
       lastError = error;
-      if (!isRetryableMlProxyError(error) || attempt === PYTHON_API_MAX_RETRIES) {
+
+      if (
+        !isRetryableMlProxyError(error) ||
+        attempt === PYTHON_API_MAX_RETRIES
+      ) {
         throw error;
       }
-      const delay = Math.min(2000 * attempt, 15000);
-      console.warn(
-        `ML service request attempt ${attempt}/${PYTHON_API_MAX_RETRIES} failed (${error.code || error.response?.status}); retry in ${delay}ms`,
+
+      const delay = Math.min(
+        2000 * attempt,
+        15000
       );
+
+      console.warn(
+        `Retry ${attempt} in ${delay}ms`
+      );
+
       await sleep(delay);
     }
   }
+
   throw lastError;
 }
 
 function createAuthToken(user) {
+
   return jwt.sign(
     {
       email: user.email,
@@ -136,84 +218,151 @@ function createAuthToken(user) {
       last_name: user.last_name,
     },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    {
+      expiresIn: JWT_EXPIRES_IN,
+    }
   );
 }
 
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers.authorization || "";
-  const [scheme, token] = authHeader.split(" ");
+function authenticateToken(
+  req,
+  res,
+  next
+) {
 
-  if (scheme !== "Bearer" || !token) {
-    return res.status(401).json({ detail: "Missing or invalid token" });
+  const authHeader =
+    req.headers.authorization || "";
+
+  const [scheme, token] =
+    authHeader.split(" ");
+
+  if (
+    scheme !== "Bearer" ||
+    !token
+  ) {
+    return res.status(401).json({
+      detail: "Missing token",
+    });
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.user = payload;
+
+    req.user = jwt.verify(
+      token,
+      JWT_SECRET
+    );
+
     next();
+
   } catch {
-    return res.status(401).json({ detail: "Invalid or expired token" });
+
+    return res.status(401).json({
+      detail: "Invalid token",
+    });
   }
 }
 
-//
-// 🔥 FIXED HEALTH CHECK (VERY IMPORTANT)
-//
+// ----------------------------
+// HEALTH
+// ----------------------------
 app.get("/health", (req, res) => {
-  res.status(200).send("OK");
+
+  res.status(200).json({
+    status: "ok",
+    backend: "running",
+    ml_api: PYTHON_API_URL,
+  });
 });
 
-
-// Signup
+// ----------------------------
+// SIGNUP
+// ----------------------------
 app.post("/signup", async (req, res) => {
-  if (!db) return res.status(503).json({ detail: "Database unavailable" });
 
-  const { email, password, firstName, lastName } = req.body;
-
-  if (!email || !password || !firstName || !lastName) {
-    return res.status(400).json({ detail: "Missing fields" });
+  if (!db) {
+    return res.status(503).json({
+      detail: "Database unavailable",
+    });
   }
 
-  const existingUser = await usersCol.findOne({ email });
+  const {
+    email,
+    password,
+    firstName,
+    lastName,
+  } = req.body;
+
+  if (
+    !email ||
+    !password ||
+    !firstName ||
+    !lastName
+  ) {
+    return res.status(400).json({
+      detail: "Missing fields",
+    });
+  }
+
+  const existingUser =
+    await usersCol.findOne({ email });
+
   if (existingUser) {
-    return res.status(400).json({ detail: "Email already registered" });
+
+    return res.status(400).json({
+      detail: "Email already exists",
+    });
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword =
+    await bcrypt.hash(password, 10);
 
   await usersCol.insertOne({
     email,
+    password: hashedPassword,
     first_name: firstName,
     last_name: lastName,
-    password: hashedPassword,
     created_at: new Date(),
   });
 
-  res.json({ message: "User created successfully" });
+  res.json({
+    message: "Signup successful",
+  });
 });
 
-
-// Login
+// ----------------------------
+// LOGIN
+// ----------------------------
 app.post("/login", async (req, res) => {
-  if (!db) return res.status(503).json({ detail: "Database unavailable" });
 
   const { email, password } = req.body;
 
-  const user = await usersCol.findOne({ email });
+  const user =
+    await usersCol.findOne({ email });
+
   if (!user) {
-    return res.status(401).json({ detail: "Invalid email or password" });
+
+    return res.status(401).json({
+      detail: "Invalid credentials",
+    });
   }
 
-  const isMatch = await bcrypt.compare(password, user.password);
+  const isMatch =
+    await bcrypt.compare(
+      password,
+      user.password
+    );
+
   if (!isMatch) {
-    return res.status(401).json({ detail: "Invalid email or password" });
+
+    return res.status(401).json({
+      detail: "Invalid credentials",
+    });
   }
 
-  const token = createAuthToken(user);
+  const token =
+    createAuthToken(user);
 
   res.json({
-    message: "Login successful",
     token,
     user: {
       email: user.email,
@@ -223,78 +372,75 @@ app.post("/login", async (req, res) => {
   });
 });
 
+// ----------------------------
+// PREDICT
+// ----------------------------
+app.post(
+  "/predict",
+  authenticateToken,
+  async (req, res) => {
 
-app.get("/me", authenticateToken, (req, res) => {
-  res.json({
-    user: {
-      email: req.user.email,
-      first_name: req.user.first_name,
-      last_name: req.user.last_name,
-    },
-  });
-});
+    try {
 
+      console.log(
+        "Sending request to ML API..."
+      );
 
-// Season recommendations
-app.get("/season-recs", async (req, res) => {
-  const season = String(req.query.season || "").trim();
+      const pythonRes =
+        await callPythonAxios(() =>
+          axios.post(
+            `${PYTHON_API_URL}/predict`,
+            req.body,
+            {
+              timeout:
+                PYTHON_API_TIMEOUT_MS,
+            }
+          )
+        );
 
-  if (!season) {
-    return res.status(400).json({ detail: "Season required" });
-  }
+      const data = pythonRes.data;
 
-  try {
-    const pythonRes = await callPythonAxios(() =>
-      axios.get(`${PYTHON_API_URL}/season-recs`, {
-        params: { season },
-        timeout: PYTHON_API_TIMEOUT_MS,
-      }),
-    );
-    res.json(pythonRes.data);
-  } catch (error) {
-    const forwarded = mlHttpDetail(error);
-    console.error("season-recs ML error:", error.message, error.response?.status);
-    res.status(503).json({
-      detail:
-        forwarded ||
-        "ML service unavailable (check PYTHON_API_URL or cold start — try again).",
-    });
-  }
-});
+      if (db) {
 
+        await predictionsCol.insertOne({
+          timestamp: new Date(),
+          features: req.body,
+          ...data,
+        });
+      }
 
-// Predict
-app.post("/predict", authenticateToken, async (req, res) => {
-  try {
-    const pythonRes = await callPythonAxios(() =>
-      axios.post(`${PYTHON_API_URL}/predict`, req.body, {
-        timeout: PYTHON_API_TIMEOUT_MS,
-      }),
-    );
-    const data = pythonRes.data;
+      res.json(data);
 
-    if (db) {
-      await predictionsCol.insertOne({
-        timestamp: new Date(),
-        features: req.body,
-        ...data,
+    } catch (error) {
+
+      console.error(
+        "ML API ERROR:",
+        error.message
+      );
+
+      console.error(
+        error.response?.data
+      );
+
+      const forwarded =
+        mlHttpDetail(error);
+
+      res.status(503).json({
+        detail:
+          forwarded ||
+          "ML service unavailable (cold start or wrong URL)",
       });
     }
-
-    res.json(data);
-  } catch (error) {
-    const forwarded = mlHttpDetail(error);
-    console.error("predict ML error:", error.message, error.response?.status);
-    res.status(503).json({
-      detail:
-        forwarded ||
-        "ML service unavailable (check PYTHON_API_URL or cold start — try again).",
-    });
   }
-});
+);
 
-
+// ----------------------------
+// START SERVER
+// ----------------------------
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+
+  console.log(
+    `Server running on port ${PORT}`
+  );
 });
 
